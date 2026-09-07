@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420" role="img" aria-labelledby="title desc">
+  <title id="title">Six Quickdraw capabilities</title>
+  <desc id="desc">Page capture, editable diagrams, on-canvas image tools, transparent-image tracing, optional AI, and unpacked source.</desc>
+  <rect width="1280" height="420" rx="28" fill="#f7f9fc"/>
+  <text x="40" y="44" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#4263EB" font-weight="700">CAPABILITIES</text>
+  <text x="40" y="78" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="26" fill="#152033" font-weight="700">One side panel that connects the usual workflow</text>
+
+  <rect x="40" y="108" width="390" height="136" rx="20" fill="#ffffff" stroke="#e4ebf5"/>
+  <circle cx="76" cy="144" r="18" fill="#4263EB"/>
+  <text x="76" y="150" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#fff" font-weight="700">01</text>
+  <text x="108" y="150" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#152033" font-weight="700">Page capture</text>
+  <text x="60" y="188" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">Right-click selected text, images,</text>
+  <text x="60" y="212" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">or the visible tab onto the board.</text>
+
+  <rect x="446" y="108" width="390" height="136" rx="20" fill="#ffffff" stroke="#e4ebf5"/>
+  <circle cx="482" cy="144" r="18" fill="#16876b"/>
+  <text x="482" y="150" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#fff" font-weight="700">02</text>
+  <text x="514" y="150" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#152033" font-weight="700">Editable diagrams</text>
+  <text x="466" y="188" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">Mermaid flowcharts become nodes</text>
+  <text x="466" y="212" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">and edges you can still move and edit.</text>
+
+  <rect x="852" y="108" width="388" height="136" rx="20" fill="#ffffff" stroke="#e4ebf5"/>
+  <circle cx="888" cy="144" r="18" fill="#A934CF"/>
+  <text x="888" y="150" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#fff" font-weight="700">03</text>
+  <text x="920" y="150" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#152033" font-weight="700">On-canvas image tools</text>
+  <text x="872" y="188" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">Crop, rotate, flip, grid-slice, and</text>
+  <text x="872" y="212" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">mask without leaving the board.</text>
+
+  <rect x="40" y="260" width="390" height="136" rx="20" fill="#ffffff" stroke="#e4ebf5"/>
+  <circle cx="76" cy="296" r="18" fill="#F4AA3C"/>
+  <text x="76" y="302" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#152033" font-weight="700">04</text>
+  <text x="108" y="302" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#152033" font-weight="700">Trace transparent PNGs</text>
+  <text x="60" y="340" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">Alpha contours become SVG paths,</text>
+  <text x="60" y="364" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">keeping holes when the source allows.</text>
+
+  <rect x="446" y="260" width="390" height="136" rx="20" fill="#ffffff" stroke="#e4ebf5"/>
+  <circle cx="482" cy="296" r="18" fill="#d562e5"/>
+  <text x="482" y="302" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#fff" font-weight="700">05</text>
+  <text x="514" y="302" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#152033" font-weight="700">Optional AI, no API key</text>
+  <text x="466" y="340" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">ChatGPT, Doubao, and Grok use the</text>
+  <text x="466" y="364" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">logged-in web tab. Drawing still works offline.</text>
+
+  <rect x="852" y="260" width="388" height="136" rx="20" fill="#ffffff" stroke="#e4ebf5"/>
+  <circle cx="888" cy="296" r="18" fill="#1F1F1F"/>
+  <text x="888" y="302" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#fff" font-weight="700">06</text>
+  <text x="920" y="302" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#152033" font-weight="700">Readable source</text>
+  <text x="872" y="340" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">Vanilla HTML, CSS, and JavaScript.</text>
+  <text x="872" y="364" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#4b5b73">Manifest V3. No build step.</text>
+</svg>

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="500" viewBox="0 0 1280 500" role="img" aria-labelledby="title desc">
+  <title id="title">Quickdraw lives in the Chrome side panel next to the current page</title>
+  <desc id="desc">A webpage stays on the left while Quickdraw collects notes, diagrams, and captures on the right.</desc>
+  <rect width="1280" height="500" rx="28" fill="#e8eef8"/>
+  <text x="40" y="40" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#4263EB" font-weight="700">SIDE PANEL</text>
+  <text x="40" y="72" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="26" fill="#152033" font-weight="700">The board sits beside the page you are reading</text>
+
+  <rect x="40" y="100" width="1200" height="364" rx="22" fill="#d7deea"/>
+  <rect x="52" y="112" width="1176" height="34" rx="10" fill="#c3ccd9"/>
+  <circle cx="74" cy="129" r="6" fill="#ff6b6b"/>
+  <circle cx="94" cy="129" r="6" fill="#ffd166"/>
+  <circle cx="114" cy="129" r="6" fill="#06d6a0"/>
+  <rect x="140" y="120" width="420" height="18" rx="9" fill="#eef2f7"/>
+  <text x="152" y="133" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#66758a">https://example.com/article</text>
+
+  <rect x="52" y="158" width="730" height="290" rx="16" fill="#ffffff"/>
+  <rect x="76" y="180" width="280" height="16" rx="6" fill="#dfe6f1"/>
+  <rect x="76" y="210" width="680" height="8" rx="4" fill="#edf2f8"/>
+  <rect x="76" y="228" width="640" height="8" rx="4" fill="#edf2f8"/>
+  <rect x="76" y="246" width="600" height="8" rx="4" fill="#edf2f8"/>
+  <rect x="76" y="276" width="210" height="132" rx="12" fill="#e7eefc"/>
+  <text x="90" y="304" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#4263EB" font-weight="700">Article</text>
+  <rect x="304" y="276" width="210" height="132" rx="12" fill="#f8ead7"/>
+  <text x="318" y="304" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#b45309" font-weight="700">Reference image</text>
+  <rect x="532" y="276" width="220" height="132" rx="12" fill="#e7f5ee"/>
+  <text x="546" y="304" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#14624f" font-weight="700">Selected text</text>
+  <rect x="546" y="322" width="192" height="28" rx="8" fill="#c8eadc"/>
+  <text x="556" y="341" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#14624f">Send to Quickdraw</text>
+
+  <rect x="798" y="158" width="430" height="290" rx="16" fill="#f7f9fc" stroke="#4263EB" stroke-width="3"/>
+  <rect x="812" y="172" width="402" height="32" rx="10" fill="#ffffff"/>
+  <text x="826" y="193" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#152033" font-weight="700">Quickdraw side panel</text>
+  <rect x="822" y="220" width="150" height="84" rx="12" fill="#fff4c7"/>
+  <text x="836" y="268" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#7a5b00">Markdown note</text>
+  <rect x="986" y="220" width="214" height="84" rx="12" fill="#dce8ff"/>
+  <text x="1000" y="268" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#27408b">Editable flowchart</text>
+  <rect x="822" y="316" width="120" height="68" rx="12" fill="#e7f5ee"/>
+  <text x="836" y="356" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#14624f">Capture</text>
+  <rect x="956" y="316" width="246" height="68" rx="12" fill="#f1e7fb"/>
+  <text x="970" y="356" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#6b21a8">Pen / arrow / mind map</text>
+  <rect x="812" y="398" width="402" height="34" rx="10" fill="#ffffff"/>
+  <text x="826" y="420" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#66758a">Select · Draw · Pen · Shape · Note · Map · Image</text>
+
+  <circle cx="788" cy="250" r="18" fill="#4263EB"/>
+  <text x="788" y="256" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#fff" font-weight="700">→</text>
+</svg>

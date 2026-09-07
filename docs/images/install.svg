@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="280" viewBox="0 0 1280 280" role="img" aria-labelledby="title desc">
+  <title id="title">Load unpacked Quickdraw source in Chrome</title>
+  <desc id="desc">Download the repo, open chrome://extensions, enable Developer mode, and load the folder that contains manifest.json.</desc>
+  <rect width="1280" height="280" rx="28" fill="#101826"/>
+  <text x="48" y="46" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#8fb0ff" font-weight="700">INSTALL IN 4 STEPS</text>
+  <text x="48" y="80" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="24" fill="#ffffff" font-weight="700">No npm. Load the unpacked source.</text>
+
+  <rect x="48" y="108" width="278" height="132" rx="18" fill="#1b2638"/>
+  <circle cx="78" cy="138" r="14" fill="#4263EB"/>
+  <text x="78" y="143" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#fff" font-weight="700">1</text>
+  <text x="102" y="144" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#fff" font-weight="700">Download</text>
+  <text x="68" y="178" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#c5d0e0">Code → Download ZIP</text>
+  <text x="68" y="202" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#8b97ab">Keep the manifest.json folder</text>
+
+  <rect x="350" y="108" width="278" height="132" rx="18" fill="#1b2638"/>
+  <circle cx="380" cy="138" r="14" fill="#4263EB"/>
+  <text x="380" y="143" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#fff" font-weight="700">2</text>
+  <text x="404" y="144" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#fff" font-weight="700">Open extensions</text>
+  <text x="370" y="178" font-family="Consolas, Segoe UI, monospace" font-size="14" fill="#c5d0e0">chrome://extensions/</text>
+  <text x="370" y="202" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#8b97ab">Chrome 116 or newer</text>
+
+  <rect x="652" y="108" width="278" height="132" rx="18" fill="#1b2638"/>
+  <circle cx="682" cy="138" r="14" fill="#4263EB"/>
+  <text x="682" y="143" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#fff" font-weight="700">3</text>
+  <text x="706" y="144" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#fff" font-weight="700">Developer mode</text>
+  <text x="672" y="178" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#c5d0e0">Turn on the top-right switch</text>
+  <text x="672" y="202" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#8b97ab">Required for unpacked loads</text>
+
+  <rect x="954" y="108" width="278" height="132" rx="18" fill="#1b2638"/>
+  <circle cx="984" cy="138" r="14" fill="#16876b"/>
+  <text x="984" y="143" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#fff" font-weight="700">4</text>
+  <text x="1008" y="144" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#fff" font-weight="700">Load unpacked</text>
+  <text x="974" y="178" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#c5d0e0">Select this extension folder</text>
+  <text x="974" y="202" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#8b97ab">Click the icon to open the board</text>
+</svg>

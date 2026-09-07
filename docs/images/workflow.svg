@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="340" viewBox="0 0 1280 340" role="img" aria-labelledby="title desc">
+  <title id="title">Quickdraw workflow: browse, capture, arrange, export</title>
+  <desc id="desc">Collect page content into a side-panel canvas, then export PNG, SVG, or a .quickdraw project.</desc>
+  <rect width="1280" height="340" rx="28" fill="#f4f7fb"/>
+  <text x="48" y="46" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#4263EB" font-weight="700">WORKFLOW</text>
+  <text x="48" y="80" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="28" fill="#152033" font-weight="700">Browse. Capture. Arrange. Take it with you.</text>
+
+  <rect x="48" y="112" width="268" height="180" rx="22" fill="#ffffff" stroke="#d7e2f3"/>
+  <circle cx="80" cy="146" r="16" fill="#4263EB"/>
+  <text x="80" y="152" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#fff" font-weight="700">1</text>
+  <text x="108" y="152" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#152033" font-weight="700">Browse</text>
+  <text x="72" y="196" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#4b5b73">Keep the article, docs,</text>
+  <text x="72" y="220" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#4b5b73">or reference page open.</text>
+  <text x="72" y="256" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#7a889c">No extra app window</text>
+
+  <path d="M328 202h28" stroke="#9db0d4" stroke-width="3" stroke-linecap="round"/>
+  <path d="M348 192l16 10-16 10" fill="none" stroke="#9db0d4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <rect x="368" y="112" width="268" height="180" rx="22" fill="#ffffff" stroke="#d7e2f3"/>
+  <circle cx="400" cy="146" r="16" fill="#16876b"/>
+  <text x="400" y="152" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#fff" font-weight="700">2</text>
+  <text x="428" y="152" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#152033" font-weight="700">Capture</text>
+  <text x="392" y="196" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#4b5b73">Send selected text, an</text>
+  <text x="392" y="220" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#4b5b73">image, or a visible tab.</text>
+  <text x="392" y="256" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#7a889c">Right-click context menu</text>
+
+  <path d="M648 202h28" stroke="#9db0d4" stroke-width="3" stroke-linecap="round"/>
+  <path d="M668 192l16 10-16 10" fill="none" stroke="#9db0d4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <rect x="688" y="112" width="268" height="180" rx="22" fill="#ffffff" stroke="#d7e2f3"/>
+  <circle cx="720" cy="146" r="16" fill="#A934CF"/>
+  <text x="720" y="152" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#fff" font-weight="700">3</text>
+  <text x="748" y="152" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#152033" font-weight="700">Arrange</text>
+  <text x="712" y="196" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#4b5b73">Notes, diagrams, paths,</text>
+  <text x="712" y="220" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#4b5b73">and on-canvas image tools.</text>
+  <text x="712" y="256" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#7a889c">Keep editing native objects</text>
+
+  <path d="M968 202h28" stroke="#9db0d4" stroke-width="3" stroke-linecap="round"/>
+  <path d="M988 192l16 10-16 10" fill="none" stroke="#9db0d4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <rect x="1008" y="112" width="224" height="180" rx="22" fill="#ffffff" stroke="#d7e2f3"/>
+  <circle cx="1040" cy="146" r="16" fill="#F4AA3C"/>
+  <text x="1040" y="152" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#152033" font-weight="700">4</text>
+  <text x="1068" y="152" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#152033" font-weight="700">Export</text>
+  <text x="1032" y="196" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#4b5b73">PNG, SVG, images,</text>
+  <text x="1032" y="220" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#4b5b73">or .quickdraw.</text>
+  <text x="1032" y="256" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#7a889c">Local-first backup</text>
+</svg>

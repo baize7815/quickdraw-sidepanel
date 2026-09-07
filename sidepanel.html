@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <title>Quickdraw 侧边栏画板</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <div id="app" class="qd-app" data-theme="light">
+    <main id="canvas-container" class="canvas-container tool-select" tabindex="0" aria-label="Quickdraw 画布">
+      <canvas id="grid-canvas"></canvas>
+      <canvas id="paint-canvas"></canvas>
+      <input id="file-input" type="file" accept="image/*" hidden />
+      <input id="project-input" type="file" accept=".quickdraw,application/json" hidden />
+    </main>
+
+    <button class="app-logo" id="btn-clear-storage" title="清理画板数据（保留设置）" aria-label="清理画板数据（保留设置）">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <path d="M7 21C7 12 13 6.5 20 7.5c6.5 1 7.5 8.5 2 11.3-4.5 2.2-9 .7-8-3.8" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="24.5" cy="24.5" r="2.6" fill="#2f6fed"/>
+      </svg>
+    </button>
+
+    <div class="filebar" id="filebar">
+      <button class="icon-btn" id="files-btn" title="文件" aria-label="文件">
+        <svg viewBox="0 0 24 24"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2h7.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/></svg>
+      </button>
+      <button class="icon-btn" id="new-file-btn" title="新建文件" aria-label="新建文件">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <input id="file-name" class="file-name" value="Untitled" aria-label="文件名" spellcheck="false" />
+    </div>
+    <button class="open-tab-btn" id="btn-open-tab" title="在新标签页中打开画板" aria-label="在新标签页中打开画板">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/>
+        <path d="m4 9 5-5M15 4l5 5M20 15l-5 5M9 20l-5-5"/>
+      </svg>
+    </button>
+    <button class="open-tab-btn asset-package-btn" id="btn-export-assets" title="下载画布中的当前图片" aria-label="下载画布中的当前图片">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m4 7 8-4 8 4-8 4z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/><path d="m8 5 8 4"/>
+      </svg>
+    </button>
+    <div id="files-menu" class="popover files-menu" hidden></div>
+
+    <aside class="actionbar" aria-label="历史与选择操作">
+      <button id="btn-undo" class="icon-btn" title="撤销 Ctrl/⌘+Z" disabled>
+        <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      </button>
+      <button id="btn-redo" class="icon-btn" title="重做 Ctrl/⌘+Shift+Z" disabled>
+        <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+      </button>
+      <div class="bar-divider horizontal"></div>
+      <button id="btn-duplicate" class="icon-btn selection-action" title="复制所选" disabled>
+        <svg viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+      </button>
+      <button id="btn-arrange" class="icon-btn selection-action" title="对齐与分布" aria-label="对齐与分布" disabled>
+        <svg viewBox="0 0 24 24"><path d="M4 4v16M8 7h9v4H8zM8 14h12v4H8z"/></svg>
+      </button>
+      <button id="btn-clear-action" class="icon-btn danger-btn" title="清空画板" aria-label="清空画板">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6"/></svg>
+      </button>
+      <div id="crop-divider" class="bar-divider horizontal" hidden></div>
+      <button id="btn-remove-bg" class="icon-btn selection-action remove-bg-action" title="AI 抠图（多选时逐张处理）" aria-label="AI 抠图（多选时逐张处理）" hidden>
+        <svg viewBox="0 0 24 24"><path d="M5 3H3v2M19 3h2v2M5 21H3v-2M19 21h2v-2"/><path d="m13.5 5 .7 2.1L16.5 8l-2.3.9-.7 2.1-.8-2.1-2.2-.9 2.2-.9z"/><path d="M7 17c1.2-3.1 2.9-4.6 5-4.6s3.8 1.5 5 4.6"/><circle cx="12" cy="10" r="2"/></svg>
+      </button>
+      <button id="btn-remove-watermark" class="icon-btn selection-action watermark-action" title="Telea 去水印（框选水印区域）" aria-label="Telea 去水印（框选水印区域）" hidden>
+        <svg viewBox="0 0 24 24"><path d="m4 16 8-8 4 4-8 8H4z"/><path d="m13.5 4 .6 1.8 1.9.7-1.9.7-.6 1.8-.7-1.8-1.8-.7 1.8-.7z"/><path d="M9 19h10"/></svg>
+      </button>
+      <button id="btn-crop" class="icon-btn selection-action crop-action" title="单击自由裁剪 · 双击设置比例" aria-label="单击自由裁剪，双击设置比例" hidden>
+        <svg viewBox="0 0 24 24"><path d="M7 3v13a2 2 0 0 0 2 2h12M3 7h13a2 2 0 0 1 2 2v12"/></svg>
+      </button>
+      <div class="bar-divider horizontal ai-action-divider"></div>
+      <button id="btn-ai-mindmap" class="icon-btn ai-mindmap-action" title="AI 脑图" aria-label="AI 脑图">
+        <svg viewBox="0 0 24 24"><path d="M5 6.5h5v4H5zM14 3.5h5v4h-5zM14 16.5h5v4h-5z"/><path d="M10 8.5h2a2 2 0 0 0 2-2M10 8.5h2a2 2 0 0 1 2 2v6"/><path d="m19 2 .4 1.1L20.5 3.5 19.4 4z"/></svg>
+      </button>
+      <button id="btn-ai-edit" class="icon-btn selection-action ai-mindmap-action" title="AI 图片编辑 / 文生图" aria-label="AI 图片编辑 / 文生图">
+        <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5z"/><circle cx="9" cy="9" r="1.5"/><path d="m5 17 4.5-4.5 3 3 2.2-2.2L20 18"/></svg>
+      </button>
+    </aside>
+    <div id="arrange-popover" class="popover arrange-popover" hidden aria-label="对齐与分布">
+      <div class="arrange-label">对象对齐</div>
+      <div class="arrange-grid">
+        <button data-align="left" title="左对齐 Alt+L">左</button><button data-align="hcenter" title="水平居中">中</button><button data-align="right" title="右对齐 Alt+R">右</button>
+        <button data-align="top" title="顶对齐 Alt+T">顶</button><button data-align="vcenter" title="垂直居中">中</button><button data-align="bottom" title="底对齐 Alt+B">底</button>
+      </div>
+      <div class="arrange-divider"></div>
+      <button class="arrange-wide" data-distribute="x">横向等间距</button>
+      <button class="arrange-wide" data-distribute="y">纵向等间距</button>
+      <button class="arrange-wide" id="btn-layout-mind">自动整理分支</button>
+      <button class="arrange-wide" id="btn-collapse-mind">折叠 / 展开分支</button>
+    </div>
+
+    <nav class="dock" id="main-toolbar" aria-label="绘图工具">
+      <div class="dock-scroll">
+        <button class="tool-btn active" data-tool="select" title="选择 V / 1">
+          <svg viewBox="0 0 24 24"><path d="M4.2 4.7 20 11.1l-6.1 1.7-1.7 6.1z"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="hand" title="抓手 H / 2">
+          <svg viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-4 0v4M14 10V4a2 2 0 0 0-4 0v6M10 10V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.3l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15"/></svg>
+        </button>
+        <div class="bar-divider"></div>
+        <button class="tool-btn" data-tool="draw" title="画笔 D / 3">
+          <svg viewBox="0 0 24 24"><path d="M21.2 6.8a1 1 0 0 0-4-4L3.8 16.2a2 2 0 0 0-.5.8L2 21.4l4.4-1.3a2 2 0 0 0 .8-.5z"/><path d="m15 5 4 4"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="highlight" title="荧光笔 I / 4">
+          <svg viewBox="0 0 24 24"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4z"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="eraser" title="橡皮擦 E / 5">
+          <svg viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a2.4 2.4 0 0 1 0-3.4l9.6-9.6a2.4 2.4 0 0 1 3.4 0l5.6 5.6a2.4 2.4 0 0 1 0 3.4L13 21"/><path d="M22 21H7M5 11l9 9"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="pen" title="钢笔 K / 6 · 单击锚点，拖拽曲线" aria-label="钢笔">
+          <svg viewBox="0 0 24 24"><path d="m3 21 5-13 8-5 5 5-5 8zM3 21l8-8M16 3l5 5"/><circle cx="12" cy="12" r="2"/></svg>
+        </button>
+        <div class="bar-divider"></div>
+        <button class="tool-btn" data-tool="line" title="直线 L / 7"><svg viewBox="0 0 24 24"><path d="M19 5 5 19"/></svg></button>
+        <button class="tool-btn" data-tool="arrow" title="箭头 A / 8"><svg viewBox="0 0 24 24"><path d="M7 7h10v10M7 17 17 7"/></svg></button>
+        <button class="tool-btn geo-btn" id="btn-shape-menu" data-tool="geo" title="形状 G / 9">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="text" title="文本 T"><svg viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></button>
+        <button class="tool-btn" data-tool="note" title="便签 N"><svg viewBox="0 0 24 24"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></svg></button>
+        <button class="tool-btn" data-tool="mindmap" title="思维导图 M · Tab 子节点 · Shift+Tab 同级"><svg viewBox="0 0 24 24"><rect x="3" y="9" width="6" height="6" rx="1.5"/><rect x="15" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/><path d="M9 12h3a3 3 0 0 0 3-3V6M12 12h1a2 2 0 0 1 2 2v4"/></svg></button>
+        <button class="tool-btn code-tool-btn" id="btn-mermaid" title="Mermaid 流程图代码" aria-label="Mermaid 流程图代码">&lt;/&gt;</button>
+        <button class="tool-btn" id="btn-upload-img" title="插入图片"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg></button>
+        <button class="tool-btn" id="btn-menu" title="画板菜单"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg></button>
+      </div>
+    </nav>
+
+    <div id="shape-popover" class="popover shape-popover" hidden>
+      <button data-shape="rect" class="shape-option active" title="矩形"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></button>
+      <button data-shape="ellipse" class="shape-option" title="椭圆"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>
+      <button data-shape="triangle" class="shape-option" title="三角形"><svg viewBox="0 0 24 24"><path d="m12 3 10 18H2z"/></svg></button>
+      <button data-shape="diamond" class="shape-option" title="菱形"><svg viewBox="0 0 24 24"><path d="m12 2 10 10-10 10L2 12z"/></svg></button>
+      <button data-shape="hexagon" class="shape-option" title="六边形"><svg viewBox="0 0 24 24"><path d="m7 3 10 0 5 9-5 9H7l-5-9z"/></svg></button>
+      <button data-shape="star" class="shape-option" title="星形"><svg viewBox="0 0 24 24"><path d="m12 2 3.1 6.3 6.9 1-5 4.8 1.2 6.9-6.2-3.2L5.8 21 7 14.1 2 9.3l6.9-1z"/></svg></button>
+      <button data-shape="cloud" class="shape-option" title="云朵"><svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .5-8A5.5 5.5 0 0 0 7 11a3.5 3.5 0 0 0 0 7z"/></svg></button>
+    </div>
+
+    <div id="style-popover" class="style-popover persistent-style-panel" aria-label="右侧样式工具栏">
+      <div class="style-card color-card">
+        <div class="color-grid" id="color-grid">
+          <button class="color-dot active" data-color="#1F1F1F" style="--dot:#1F1F1F" title="黑"></button>
+          <button class="color-dot" data-color="#A8B2BF" style="--dot:#A8B2BF" title="灰"></button>
+          <button class="color-dot" data-color="#D562E5" style="--dot:#D562E5" title="洋红"></button>
+          <button class="color-dot" data-color="#A934CF" style="--dot:#A934CF" title="紫"></button>
+          <button class="color-dot" data-color="#4263EB" style="--dot:#4263EB" title="蓝"></button>
+          <button class="color-dot" data-color="#3FA0F3" style="--dot:#3FA0F3" title="天蓝"></button>
+          <button class="color-dot" data-color="#F4AA3C" style="--dot:#F4AA3C" title="黄橙"></button>
+          <button class="color-dot" data-color="#E86A12" style="--dot:#E86A12" title="橙"></button>
+          <button class="color-dot" data-color="#45B464" style="--dot:#45B464" title="绿"></button>
+          <button class="color-dot" data-color="#FA7076" style="--dot:#FA7076" title="珊瑚"></button>
+          <button class="color-dot" data-color="#EF3338" style="--dot:#EF3338" title="红"></button>
+          <input id="custom-color" type="color" value="#1F1F1F" title="自定义颜色" />
+        </div>
+      </div>
+      <div class="style-card line-card">
+        <div class="style-row">
+          <button class="style-option size-option" data-size="2" title="细"><span class="size-pip" style="--pip:3px"></span></button>
+          <button class="style-option size-option active" data-size="4" title="中"><span class="size-pip" style="--pip:6px"></span></button>
+          <button class="style-option size-option" data-size="8" title="粗"><span class="size-pip" style="--pip:10px"></span></button>
+          <button class="style-option size-option" data-size="14" title="特粗"><span class="size-pip" style="--pip:14px"></span></button>
+        </div>
+        <div class="style-row">
+          <button class="style-option dash-option active" data-dash="solid" title="实线"><svg viewBox="0 0 24 24"><path d="M4 12h16"/></svg></button>
+          <button class="style-option dash-option" data-dash="dashed" title="虚线"><svg viewBox="0 0 24 24"><path d="M4 12h4M11 12h4M18 12h2"/></svg></button>
+          <button class="style-option dash-option" data-dash="dotted" title="点线"><svg viewBox="0 0 24 24"><path d="M4.5 12h.01M9.5 12h.01M14.5 12h.01M19.5 12h.01"/></svg></button>
+        </div>
+      </div>
+      <div class="style-card shape-style-card">
+        <div class="style-row stroke-row" aria-label="形状边框">
+          <button class="style-option stroke-option active" data-stroke="solid" title="显示边框"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+          <button class="style-option stroke-option" data-stroke="none" title="无边框"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M4 20 20 4"/></svg></button>
+        </div>
+        <div class="style-row">
+          <button class="style-option fill-option active" data-fill="none" title="无填充"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+          <button class="style-option fill-option" data-fill="semi" title="半透明"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" fill-opacity=".18"/></svg></button>
+          <button class="style-option fill-option" data-fill="solid" title="实心"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" fill-opacity=".5"/></svg></button>
+          <button class="style-option fill-option" data-fill="pattern" title="斜线"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="m6 15 9-9M9 18l9-9"/></svg></button>
+        </div>
+      </div>
+      <div class="style-card mind-inline-card" id="mind-style-card" hidden aria-label="思维导图连线样式">
+        <div class="style-row mind-style-row" id="mind-style-control">
+          <button class="style-option mind-style-option" data-mind-style="orthogonal" title="直角连接" aria-label="直角连接"><span aria-hidden="true">□</span></button>
+          <button class="style-option mind-style-option active" data-mind-style="rounded" title="圆角连接" aria-label="圆角连接"><span aria-hidden="true">▢</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="mind-text-color-menu" class="popover mind-text-color-menu" hidden aria-label="思维导图文字颜色">
+      <div class="mind-color-title">文字颜色</div>
+      <div class="mind-text-color-grid">
+        <button class="mind-text-color-dot" data-color="#1F1F1F" style="--dot:#1F1F1F" title="黑"></button>
+        <button class="mind-text-color-dot" data-color="#A8B2BF" style="--dot:#A8B2BF" title="灰"></button>
+        <button class="mind-text-color-dot" data-color="#D562E5" style="--dot:#D562E5" title="洋红"></button>
+        <button class="mind-text-color-dot" data-color="#A934CF" style="--dot:#A934CF" title="紫"></button>
+        <button class="mind-text-color-dot" data-color="#4263EB" style="--dot:#4263EB" title="蓝"></button>
+        <button class="mind-text-color-dot" data-color="#3FA0F3" style="--dot:#3FA0F3" title="天蓝"></button>
+        <button class="mind-text-color-dot" data-color="#F4AA3C" style="--dot:#F4AA3C" title="黄橙"></button>
+        <button class="mind-text-color-dot" data-color="#E86A12" style="--dot:#E86A12" title="橙"></button>
+        <button class="mind-text-color-dot" data-color="#0C9872" style="--dot:#0C9872" title="青绿"></button>
+        <button class="mind-text-color-dot" data-color="#45B464" style="--dot:#45B464" title="绿"></button>
+        <button class="mind-text-color-dot" data-color="#FA7076" style="--dot:#FA7076" title="珊瑚"></button>
+        <button class="mind-text-color-dot" data-color="#EF3338" style="--dot:#EF3338" title="红"></button>
+      </div>
+    </div>
+
+    <div id="menu-popover" class="popover menu-popover" hidden>
+      <button class="menu-item" id="btn-export-png"><span>导出 PNG</span><kbd>⇧E</kbd></button>
+      <button class="menu-item" id="btn-export-transparent"><span>导出透明 PNG</span></button>
+      <button class="menu-item" id="btn-export-svg"><span>导出 SVG（可编辑矢量）</span></button>
+      <button class="menu-item" id="btn-export-directory"><span>默认导出路径</span><span class="menu-value" id="export-directory-label">浏览器默认</span></button>
+      <button class="menu-item" id="btn-copy-png"><span>复制 PNG 到剪贴板</span></button>
+      <button class="menu-item" id="btn-copy-svg"><span>复制 SVG 到剪贴板</span></button>
+      <div class="menu-divider"></div>
+      <button class="menu-item" id="btn-export-project"><span>导出 Quickdraw 项目</span></button>
+      <button class="menu-item" id="btn-import-project"><span>导入 Quickdraw 项目</span></button>
+      <button class="menu-item" id="btn-versions"><span>版本历史</span></button>
+      <button class="menu-item" id="btn-search"><span>查找画板内容</span><kbd>Ctrl F</kbd></button>
+      <button class="menu-item" id="btn-edit-mermaid"><span>编辑 Mermaid 源码</span></button>
+      <button class="menu-item" id="btn-copy-mermaid"><span>复制 Mermaid 源码</span></button>
+      <button class="menu-item" id="btn-ai-pending"><span>待导入脑图</span><span class="menu-value" id="ai-menu-status">无</span></button>
+      <div class="menu-divider"></div>
+      <button class="menu-item" id="btn-fit"><span>缩放至内容</span><kbd>F</kbd></button>
+      <button class="menu-item" id="btn-clear"><span>清空画板</span></button>
+      <div class="menu-divider"></div>
+      <div class="menu-control"><span>网格</span><div class="seg" id="grid-control">
+        <button data-grid="none" title="无网格">○</button>
+        <button data-grid="lines" class="active" title="方格">▦</button>
+        <button data-grid="ruled" title="横线">≡</button>
+        <button data-grid="dots" title="点阵">⠿</button>
+        <button data-grid="crosses" title="十字">＋</button>
+        <button data-grid="iso" title="等距">◇</button>
+      </div></div>
+      <div class="menu-control"><span>主题</span><div class="seg" id="theme-control">
+        <button data-theme="light" class="active" title="浅色">☀</button>
+        <button data-theme="dark" title="深色">☾</button>
+      </div></div>
+      <div class="menu-control"><span>网格吸附</span><div class="seg" id="snap-control"><button data-enabled="false">关</button><button data-enabled="true" class="active">开</button></div></div>
+      <div class="menu-control ai-provider-control"><label for="ai-provider-select">默认 AI</label><select id="ai-provider-select" class="provider-select" aria-label="默认 AI">
+        <option value="gpt">GPT</option>
+        <option value="doubao">豆包</option>
+        <option value="grok">Grok</option>
+      </select></div>
+    </div>
+
+    <footer class="zoom-bar">
+      <button id="btn-zoom-out" title="缩小">−</button>
+      <span id="zoom-level">100%</span>
+      <button id="btn-zoom-in" title="放大">＋</button>
+      <button id="btn-zoom-reset" title="重置缩放">100%</button>
+    </footer>
+
+    <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+    <div id="ai-mindmap-dialog" class="ai-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="ai-mindmap-dialog-title">
+      <div class="ai-dialog">
+        <div class="ai-dialog-title" id="ai-mindmap-dialog-title">AI 脑图</div>
+        <div class="ai-provider-row">
+          <div class="ai-provider-field"><label for="ai-task-provider">AI平台</label><select id="ai-task-provider" class="provider-select"><option value="gpt">GPT</option><option value="doubao">豆包</option><option value="grok">Grok</option></select></div>
+          <div id="ai-image-preset-field" class="ai-provider-field"><label for="ai-image-preset">提示词预设</label><select id="ai-image-preset" class="provider-select" aria-label="提示词预设"><option value="">选择预设</option></select></div>
+          <span id="ai-task-status" class="ai-task-status">准备就绪</span>
+        </div>
+        <textarea id="ai-mindmap-input" class="ai-mindmap-input" spellcheck="false" maxlength="4000" placeholder="例如：做一个外卖系统的开发架构交互流程图"></textarea>
+        <div id="ai-task-error" class="ai-task-error" hidden></div>
+        <div id="ai-task-list" class="ai-task-list" aria-live="polite"></div>
+        <div class="ai-dialog-hint">所选 AI 平台会在同一浏览器配置的专用标签页中处理；首次使用需要授予对应网站权限。未确认发送时不会自动重试。</div>
+        <div class="mermaid-actions"><button id="ai-open-provider" class="confirm-btn">打开 GPT</button><button id="ai-task-cancel" class="confirm-btn" hidden>取消任务</button><button id="ai-mindmap-cancel" class="confirm-btn">关闭</button><button id="ai-mindmap-submit" class="confirm-btn mermaid-generate">发送到 GPT</button></div>
+      </div>
+    </div>
+    <div id="ai-task-flyout" class="ai-task-flyout" hidden>
+      <div class="ai-task-flyout-card" role="status" aria-live="polite">
+        <div class="ai-task-flyout-heading"><span id="ai-task-flyout-provider">AI</span><span id="ai-task-flyout-stage">处理中</span><span id="ai-task-flyout-indicator" aria-hidden="true"></span></div>
+        <div id="ai-task-flyout-text" class="ai-task-flyout-text"></div>
+       <div class="ai-task-flyout-actions"><button id="ai-task-flyout-details" type="button">展开详情</button><button id="ai-task-flyout-reedit" type="button" hidden>重新编辑</button><button id="ai-task-flyout-cancel" type="button">取消任务</button><button id="ai-task-flyout-dismiss" type="button" aria-label="关闭任务提示" title="关闭任务提示" hidden>×</button></div>
+      </div>
+    </div>
+    <div id="mermaid-dialog" class="mermaid-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="mermaid-dialog-title">
+      <div class="mermaid-dialog">
+        <div class="mermaid-title" id="mermaid-dialog-title">Mermaid 流程图</div>
+        <textarea id="mermaid-input" class="mermaid-input" spellcheck="false" placeholder="flowchart TD&#10;    Start([开始]) --> Work[执行任务]&#10;    Work --> End([结束])"></textarea>
+        <div class="mermaid-hint">Enter 生成 · Shift+Enter 换行 · Esc 取消</div>
+        <div class="mermaid-actions">
+          <button id="mermaid-cancel" class="confirm-btn">取消</button>
+          <button id="mermaid-generate" class="confirm-btn mermaid-generate">生成</button>
+        </div>
+      </div>
+    </div>
+    <div id="clear-dialog" class="confirm-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="clear-dialog-title">
+      <div class="confirm-dialog">
+        <div class="confirm-title" id="clear-dialog-title">清空当前画板？</div>
+        <div class="confirm-text" id="clear-dialog-text">这会删除当前画板中的全部内容。清空后仍可使用撤销恢复。</div>
+        <div class="confirm-actions">
+          <button id="clear-cancel" class="confirm-btn">取消</button>
+          <button id="clear-confirm" class="confirm-btn danger-confirm">清空画板</button>
+        </div>
+      </div>
+    </div>
+    <div id="storage-dialog" class="confirm-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="storage-dialog-title">
+      <div class="confirm-dialog">
+        <div class="confirm-title" id="storage-dialog-title">清理画板数据？</div>
+        <div class="confirm-text">将永久删除所有画板、图片资源和版本历史，并释放相关缓存，无法撤销。偏好和导出目录设置会保留，清理后创建一个新的空白画板。</div>
+        <div class="confirm-actions">
+          <button id="storage-cancel" class="confirm-btn">取消</button>
+          <button id="storage-confirm" class="confirm-btn danger-confirm">清理画板数据</button>
+        </div>
+      </div>
+    </div>
+    <div id="search-dialog" class="confirm-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="search-dialog-title">
+      <div class="confirm-dialog utility-dialog">
+        <div class="confirm-title" id="search-dialog-title">查找画板内容</div>
+        <input id="search-input" class="utility-input" type="search" placeholder="搜索文本、便签或节点" autocomplete="off" />
+        <div id="search-results" class="utility-list"></div>
+        <div class="confirm-actions"><button id="search-close" class="confirm-btn">关闭</button></div>
+      </div>
+    </div>
+    <div id="versions-dialog" class="confirm-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="versions-dialog-title">
+      <div class="confirm-dialog utility-dialog">
+        <div class="confirm-title" id="versions-dialog-title">版本历史</div>
+        <div class="confirm-text">恢复操作会先保存当前版本。</div>
+        <div id="versions-list" class="utility-list version-list"></div>
+        <div class="confirm-actions"><button id="versions-close" class="confirm-btn">关闭</button></div>
+      </div>
+    </div>
+  </div>
+  <script src="core-utils.js"></script>
+  <script src="vector-utils.js"></script>
+  <script src="editing-tools.js"></script>
+  <script src="storage.js"></script>
+  <script src="zip-utils.js"></script>
+  <script src="koukoutu-client.js"></script>
+  <script src="ai-image-utils.js"></script>
+  <script src="ai-image-presets.js"></script>
+  <script src="ai-protocol.js"></script>
+  <script src="ai-task-store.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

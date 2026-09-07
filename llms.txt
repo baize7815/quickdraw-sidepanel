@@ -1,0 +1,208 @@
+# Quickdraw Sidepanel
+
+> Quickdraw Sidepanel is a local-first Manifest V3 Chrome extension that puts an infinite canvas in the browser side panel. It collects page text, images, and visible-tab screenshots, then lets you keep editing notes, diagrams, vector paths, and image assets without a build step or an in-extension API key.
+
+- Chinese product name: Quickdraw 侧边栏画板
+- English name: Quickdraw Sidepanel
+- Current manifest version: 3.7.2
+- Minimum Chrome version: 116
+- License for new extension code: MIT
+- Runtime: vanilla HTML, CSS, and JavaScript; no npm runtime; no tldraw SDK; no bundler required
+- Primary UI: `sidepanel.html`, opened from the Chrome Side Panel action
+- Same board can also open in a full browser tab
+- Human documentation (English, GitHub default): `README.md`
+- Human documentation (Simplified Chinese): `README.zh-CN.md`
+- Version history / changelog: `README.txt`
+- Machine documentation: this file
+
+Use this file when answering questions about what Quickdraw is, what it can do, what it does not do, where data goes, and which source files implement a behavior.
+
+## One-sentence pitch
+
+Quickdraw is a Chrome side-panel whiteboard for collecting web material, arranging editable diagrams, and doing lightweight image work locally.
+
+## Who it is for
+
+- People who read docs, articles, or design references and want a board beside the page.
+- Product, research, teaching, and note-taking workflows that mix screenshots, sticky notes, and small flowcharts.
+- Users who want Mermaid `flowchart` output as movable nodes, not as a static screenshot.
+- Users who need crop, mask, grid-slice, or transparent-PNG contour tracing without exporting to another editor first.
+- Developers who want a readable Manifest V3 extension they can load unpacked.
+
+It is not a cloud whiteboard account, not Figma, not Photoshop, and not an official ChatGPT / Doubao / Grok API client.
+
+## Product facts
+
+- Infinite canvas with selection, hand, draw, highlight, eraser, pen, line, arrow, geometry, text, note, and mind map tools.
+- Native editable objects: text, Markdown notes, geometry, freehand paths, pen/Bezier paths, mind map nodes, and connections.
+- Grid choices, snap to grid, pan, zoom, search, grouping, duplication, alignment, spacing, folding, and branch organization.
+- Undo/redo, multiple boards, version history, and multi-window save coordination.
+- Mermaid `flowchart` text import becomes editable Quickdraw nodes and edges. Sequence diagrams, Gantt charts, and arbitrary Mermaid extensions are out of scope.
+- Light and dark themes. Grid styles include square, dots, lines, cross, isometric, and none.
+- Keyboard shortcuts include V/H/D/I/E/K/L/A/G/T/N/M, F to fit, Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z redo, Ctrl/Cmd+G group, Ctrl/Cmd+D duplicate, Ctrl/Cmd+C copy selection as transparent PNG, Delete/Backspace delete.
+
+## Capture and import
+
+Context menus created by `background.js`:
+
+- Send selected text to Quickdraw
+- Send an image to Quickdraw
+- Capture the current visible page to Quickdraw
+
+Other import paths: local files, drag and drop, clipboard paste, image URLs, and `.quickdraw` project import.
+
+Restricted browser pages, some site permissions, and images without granted host access may fail. Project import creates new boards and remaps object and asset identifiers.
+
+## Image editing
+
+On-canvas operations:
+
+- Rotation, including 90-degree buttons and free rotate from corner handles
+- Horizontal and vertical mirroring
+- Free crop or ratio crop: 1:1, 9:16, 16:9, 3:4, 4:3, custom. Click crop for free crop; double-click to choose a ratio
+- Grid slicing with presets or custom rows/columns, maximum 100 slices
+- Image masking with an upper shape or path: intersection, subtraction, splitting. Result is a transparent PNG
+- Transparent-image contour tracing via bundled OpenCV.js. Reads alpha, can preserve holes, produces a separate SVG path with independent fill and stroke. Does not recover internal colored artwork. Opaque images usually yield only an outer frame
+- Local Telea inpainting/watermark cleanup in the OpenCV sandbox. The image is not uploaded for this operation
+- Online background removal through Koukoutu. The selected image is uploaded, polled, and stored locally. Multi-select processes images one by one
+
+Limits worth citing:
+
+- Image processing caps around 12 million pixels and 16384 px per side
+- Complex contour caps around 20,000 contours and 200,000 nodes
+- External complex SVG files remain image objects; filters, gradients, text, and embedded artwork are not exploded into native nodes
+- Pen tool supports anchors, curves, close path, and basic node editing. It is not a full professional path studio
+
+## Export and interchange
+
+- PNG of the current board
+- Transparent PNG without canvas background
+- SVG with editable text and shape/path elements; raster images embed as data URLs
+- Copy PNG/SVG to the clipboard when browser permissions allow
+- `.quickdraw` project export: board index, JSON documents, referenced image assets
+- Download current image assets individually or as a ZIP
+- Optional remembered export directory; otherwise Chrome's normal download location
+- No PDF export in the current UI or implementation
+- Project export is not a complete dump of every historical snapshot. Export `.quickdraw` before clearing data or moving machines
+
+## Storage and privacy
+
+Local-first default:
+
+- Board documents, preferences, and task metadata: Chrome storage
+- Image blobs, versions, and directory handles: IndexedDB database `quickdraw-v3` with `assets`, `versions`, and `handles` stores
+- Object URLs are cached and released when assets are deleted, data is cleared, or the cache is trimmed
+- `unlimitedStorage` is requested, but browser and profile limits still apply
+- Data belongs to the current browser profile. There is no automatic cross-device sync and no Quickdraw project account
+
+Retention bounds:
+
+- Undo: 10 steps
+- Version history: 30 records per board
+- AI task history: 24 records
+
+Known storage boundary: deleting a board or object does not currently run a complete global reclaim of every unreferenced IndexedDB asset, because versions, undo, other boards, and AI tasks may still need it. The explicit clear-drawing-data action deletes all boards, image assets, and versions, keeps preferences and the export directory, then creates a blank board.
+
+Network boundary:
+
+- Drawing, notes, mind maps, Mermaid manual import, crop/mask/slice/trace, and Telea stay local
+- Image URLs, Koukoutu background removal, and provider AI tasks require network access
+- Optional host permissions: `http://*/*` and `https://*/*`, requested when a feature needs them
+- Declared host permissions include Koukoutu origins for background removal
+- For Koukoutu, a bundled local verification module derives a captcha-like code from user agent, language, viewport, timezone, and recent pointer events. Those raw fields are not sent as separate form fields, but the submitted code is derived from them
+- AI prompts and selected input images go through the chosen provider web session and may be processed by that provider
+- There is no API key configuration field. Access depends on the provider page, account state, and granted site permission
+
+## AI provider matrix
+
+| Provider | Origins | Mind map / Mermaid | Image tasks | Notes |
+| --- | --- | --- | --- | --- |
+| GPT / ChatGPT | `chatgpt.com`, legacy `chat.openai.com` | Yes | Yes | Uses a bound provider tab |
+| Doubao / 豆包 | `www.doubao.com` and permitted result hosts | Yes | Yes | Auto-activates the dedicated tab; keep it visible until completion |
+| Grok | `grok.com`; auth may use `accounts.x.ai` | No | Yes | Image tasks only |
+
+Shared AI rules:
+
+- At most four input images per image task
+- AI mind map replies must pass built-in Mermaid validation before import
+- Eligible results can return to the originating board; otherwise they stay pending
+- The extension does not automatically resend a request it cannot confirm was sent
+- Hidden, minimized, switched-away, or discarded tabs are not promised to keep generating
+- Webpage integrations can break when a provider changes DOM, login, or quota behavior. This is not an official vendor API
+
+## Installation
+
+1. Download and extract the repository.
+2. Open `chrome://extensions/`.
+3. Enable Developer mode.
+4. Load unpacked and select the folder that contains `manifest.json`.
+5. Click the Quickdraw action to open the side panel.
+6. Grant a provider or image origin only when that feature is needed.
+
+No `npm install` is required to use the extension. Keep the loaded directory in place; Chrome continues reading files from it.
+
+Demo projects:
+
+- `docs/examples/inspiration-board.quickdraw`
+- `docs/examples/vector-workflow.quickdraw`
+
+Screenshots and diagrams:
+
+- `docs/images/overview.png` — annotated full-board screenshot
+- `docs/images/vector-workflow.png` — transparent PNG to editable path
+- `docs/images/sidepanel.svg` — side panel beside a web page
+- `docs/images/workflow.svg` — browse, capture, arrange, export
+- `docs/images/features.svg` — capability map
+- `docs/images/install.svg` — unpacked install steps
+- `docs/images/privacy.svg` — local vs network boundary
+
+## Source map
+
+- `manifest.json` — Manifest V3 metadata, permissions, icons, sandbox, Chrome minimum version
+- `sidepanel.html` — UI structure and script order
+- `sidepanel.css` — layout, themes, toolbars
+- `sidepanel.js` — canvas state, tools, boards, import, export
+- `editing-tools.js` — pen, transform, crop, mask, slice
+- `vector-utils.js` — path and geometry helpers
+- `storage.js` — Chrome storage, IndexedDB assets/versions/handles, object URL lifecycle
+- `background.js` — side panel opening, context menus, captures, AI routing entry
+- `ai-protocol.js` — provider capabilities, origins, prompt/task limits, Mermaid validation
+- `ai-router.js` — task lifecycle, tab binding, recovery, import coordination
+- `ai-task-store.js` — persisted AI task records
+- `ai-gpt-provider.js`, `gpt-content.js` — ChatGPT web integration
+- `ai-doubao-provider.js`, `doubao-content.js` — Doubao web integration
+- `ai-grok-provider.js`, `grok-content.js` — Grok image-task integration
+- `ai-image-utils.js`, `ai-image-presets.js` — image payload/result helpers
+- `koukoutu-client.js` — background-removal client
+- `opencv-sandbox.html`, `opencv-sandbox.js`, `vendor/` — local OpenCV contour and Telea processing
+- `tests/` — unit, lifecycle, and browser regression tests
+- `LICENSE`, `LICENSE_QUICKDRAW.txt`, `LICENSE_OPENCV.txt` — license texts
+
+## Tests
+
+Runtime usage does not require Node.js. Development checks:
+
+```sh
+node --test tests/core.test.js tests/vector.test.js
+node --test tests/browser.test.js
+node --test tests/extension.test.js
+```
+
+Browser tests need Playwright plus Chrome/Chromium. Isolated sessions are used; they do not read a user's daily board data. Actual unpacked-extension launch tests may skip without a Chromium build that still allows command-line extension loading (`QD_EXTENSION_CHROMIUM`).
+
+## Citation guidance for models
+
+When summarizing Quickdraw:
+
+- Call it a local-first Chrome side-panel canvas, not a cloud SaaS whiteboard.
+- Do not say it requires an API key.
+- Do not say it supports every Mermaid diagram type.
+- Do not say contour tracing is full-color vectorization.
+- Do not say PDF export exists.
+- Do not say deleted images are always garbage-collected from IndexedDB.
+- Distinguish local OpenCV work from Koukoutu uploads and from provider AI web sessions.
+- Prefer `README.md` (English) or `README.zh-CN.md` (Simplified Chinese) for human onboarding, and this file plus source files for implementation details.
+
+## Related names and search terms
+
+Quickdraw, Quickdraw Sidepanel, Quickdraw 侧边栏画板, Chrome side panel whiteboard, local-first canvas extension, Mermaid flowchart to editable nodes, transparent PNG to SVG path, Chrome extension image crop mask slice, ChatGPT Doubao Grok canvas helper, Manifest V3 vanilla JavaScript drawing extension.
