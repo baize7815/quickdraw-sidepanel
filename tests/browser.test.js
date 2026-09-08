@@ -7,6 +7,8 @@ const http=require('node:http');
 const {chromium}=require('playwright');
 let browser,page,server;
 const errors=[];
+const VALID_PNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64');
+const imageFile=(name='image.png',buffer=VALID_PNG,mimeType='image/png')=>({name,mimeType,buffer});
 before(async()=>{
   const root=path.resolve(__dirname,'..');
   server=http.createServer((req,res)=>{
@@ -32,6 +34,14 @@ before(async()=>{
 });
 after(async()=>{await browser?.close();await new Promise(resolve=>server?server.close(resolve):resolve());});
 
+async function dispatchImageDrop(files,clientX=700,clientY=500){
+  await page.evaluate(({files,clientX,clientY})=>{
+    const dataTransfer=new DataTransfer();
+    for(const file of files)dataTransfer.items.add(new File([Uint8Array.from(file.bytes)],file.name,{type:file.type}));
+    document.querySelector('.canvas-container').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,clientX,clientY,dataTransfer}));
+  },{files:files.map(file=>({name:file.name,type:file.mimeType,bytes:Array.from(file.buffer)})),clientX,clientY});
+}
+
 test('UI：启动、图标对齐、固定工具条与裁剪预设',async()=>{
   await page.evaluate(async()=>{resetBoard();await testImage();});
   await page.locator('#btn-arrange').click();
@@ -47,6 +57,67 @@ test('UI：启动、图标对齐、固定工具条与裁剪预设',async()=>{
   assert.equal(await page.evaluate(()=>quickdraw.cropRatio),16/9);
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#selection-toolbar').isVisible(),true);
+});
+
+test('浏览器：文件输入和拖放支持批量导入、网格排列、共同选中且一次撤销',async()=>{
+  await page.evaluate(()=>resetBoard());
+  assert.notEqual(await page.locator('#file-input').getAttribute('multiple'),null);
+  await page.locator('#file-input').setInputFiles([imageFile('one.png'),imageFile('two.png'),imageFile('three.png'),imageFile('four.png')]);
+  await page.waitForFunction(()=>quickdraw.elements.length===4&&quickdraw.selectedElements.length===4);
+  const inputState=await page.evaluate(()=>{const positions=quickdraw.elements.map(el=>({x:el.x,y:el.y,groupId:el.groupId}));return{positions,selected:quickdraw.getSelectedElements().length,groups:positions.filter(el=>el.groupId).length};});
+  assert.equal(inputState.selected,4);assert.equal(inputState.groups,0);assert.equal(new Set(inputState.positions.map(p=>`${p.x},${p.y}`)).size,4);assert.equal(new Set(inputState.positions.map(p=>p.x)).size,2);assert.equal(new Set(inputState.positions.map(p=>p.y)).size,2);
+  await page.evaluate(()=>quickdraw.undo());assert.equal(await page.evaluate(()=>quickdraw.elements.length),0);
+
+  await page.evaluate(()=>resetBoard());
+  await dispatchImageDrop([imageFile('drop-a.png'),imageFile('drop-b.png'),imageFile('drop-c.png')]);
+  await page.waitForFunction(()=>quickdraw.elements.length===3&&quickdraw.selectedElements.length===3);
+  const dropState=await page.evaluate(()=>({selected:quickdraw.getSelectedElements().map(el=>el.id),groups:quickdraw.elements.filter(el=>el.groupId).length,positions:quickdraw.elements.map(el=>[el.x,el.y])}));
+  assert.equal(dropState.selected.length,3);assert.equal(dropState.groups,0);assert.equal(new Set(dropState.positions.map(p=>p.join(','))).size,3);
+});
+
+test('浏览器：批量导入跳过坏图和过大文件，同时保留有效图片',async()=>{
+  await page.evaluate(()=>resetBoard());
+  const oversized=Buffer.alloc(25*1024*1024+1);
+  await page.locator('#file-input').setInputFiles([imageFile('valid.png'),imageFile('broken.png',Buffer.from('not-a-png')),imageFile('oversized.png',oversized)]);
+  await page.waitForFunction(()=>quickdraw.elements.length===1&&quickdraw.selectedElements.length===1);
+  const state=await page.evaluate(async()=>{const image=quickdraw.elements[0],asset=await assetPixel(image,0,0);return{type:image.type,asset,toast:document.querySelector('#toast').textContent};});
+  assert.equal(state.type,'image');assert.equal(state.asset.w,1);assert.equal(state.asset.h,1);assert.match(state.toast,/未导入|过大|损坏|格式/);
+});
+
+test('浏览器：切换画板期间批量导入不会写入新画板',async()=>{
+  await page.evaluate(()=>resetBoard());
+  await page.evaluate(()=>{
+    const b=quickdraw;b.__decodeEntered=new Promise(resolve=>{b.__resolveDecodeEntered=resolve});b.__decodeRelease=new Promise(resolve=>{b.__resolveDecodeRelease=resolve});b.__decodeDone=false;b.__decodeOriginal=b.decodeImageBlob.bind(b);
+    b.decodeImageBlob=async blob=>{b.__resolveDecodeEntered();await b.__decodeRelease;try{return await b.__decodeOriginal(blob)}finally{b.__decodeDone=true}};
+  });
+  await page.locator('#file-input').setInputFiles(imageFile('late.png'));
+  await page.evaluate(()=>quickdraw.__decodeEntered);
+  const oldFileId=await page.evaluate(()=>quickdraw.currentFileId);
+  await page.evaluate(()=>quickdraw.createFile());
+  await page.evaluate(()=>quickdraw.__resolveDecodeRelease());
+  await page.waitForFunction(()=>quickdraw.__decodeDone===true);
+  await page.waitForTimeout(50);
+  const state=await page.evaluate(()=>({fileId:quickdraw.currentFileId,elements:quickdraw.elements.length,toast:document.querySelector('#toast').textContent}));
+  await page.evaluate(()=>{quickdraw.decodeImageBlob=quickdraw.__decodeOriginal;delete quickdraw.__decodeOriginal;});
+  assert.notEqual(state.fileId,oldFileId);assert.equal(state.elements,0);assert.match(state.toast,/画板已切换|重新导入/);
+});
+
+test('浏览器：导出所选为 PNG 和 SVG 时只包含所选对象，PNG 保持透明',async()=>{
+  await page.evaluate(()=>{
+    const b=resetBoard(),selected={id:'selected-export',type:'ellipse',x:300,y:300,w:40,h:30,fill:'solid',stroke:'none',color:'#ff0000'},other={id:'other-export',type:'rect',x:500,y:300,w:40,h:30,fill:'solid',stroke:'none',color:'#00ff00'};
+    b.elements=[selected,other];b.setSelection([selected],false);b.commit();b.renderNow();b.__downloads=[];b.__downloadBlob=b.downloadBlob;b.downloadBlob=async(blob,filename)=>b.__downloads.push({filename,type:blob.type,bytes:Array.from(new Uint8Array(await blob.arrayBuffer()))});
+  });
+  assert.equal(await page.locator('#btn-copy-png span').textContent(),'导出所选为 PNG');assert.equal(await page.locator('#btn-copy-svg span').textContent(),'导出所选为 SVG');
+  await page.locator('#btn-menu').click();await page.locator('#btn-copy-png').click();await page.waitForFunction(()=>quickdraw.__downloads.length===1);
+  const png=await page.evaluate(async()=>{const d=quickdraw.__downloads[0],bitmap=await createImageBitmap(new Blob([Uint8Array.from(d.bytes)],{type:d.type})),canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);const corner=Array.from(ctx.getImageData(0,0,1,1).data),center=Array.from(ctx.getImageData(Math.floor(bitmap.width/2),Math.floor(bitmap.height/2),1,1).data);bitmap.close();return{filename:d.filename,type:d.type,w:canvas.width,h:canvas.height,corner,center};});
+  assert.match(png.filename,/所选\.png$/);assert.equal(png.type,'image/png');assert.deepEqual([png.w,png.h],[80,60]);assert.equal(png.corner[3],0);assert.deepEqual(png.center,[255,0,0,255]);
+  await page.evaluate(()=>{quickdraw.__downloads=[];quickdraw.setSelection([quickdraw.elements[0]],false);});
+  await page.locator('#btn-menu').click();await page.locator('#btn-copy-svg').click();await page.waitForFunction(()=>quickdraw.__downloads.length===1);
+  const svg=await page.evaluate(()=>{const d=quickdraw.__downloads[0];return{filename:d.filename,type:d.type,text:new TextDecoder().decode(Uint8Array.from(d.bytes))};});
+  assert.match(svg.filename,/所选\.svg$/);assert.match(svg.type,/svg/);assert.match(svg.text,/ff0000/i);assert.doesNotMatch(svg.text,/00ff00/i);
+  await page.evaluate(()=>{quickdraw.downloadBlob=quickdraw.__downloadBlob;quickdraw.__downloads=[];quickdraw.clearSelection();});
+  await page.locator('#btn-menu').click();await page.locator('#btn-copy-png').click();await page.waitForTimeout(50);
+  assert.equal(await page.evaluate(()=>quickdraw.__downloads.length),0);assert.match(await page.locator('#toast').textContent(),/先选择|导出/);
 });
 
 test('浏览器：镜像和旋转改变画面、命中、SVG 输出并支持撤销',async()=>{

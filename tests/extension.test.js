@@ -31,7 +31,7 @@ test('实际扩展加载及隔离 OpenCV 轮廓提取', {skip:!fs.existsSync(exe
       const data=new ImageData(30,30);for(let y=2;y<28;y++)for(let x=2;x<28;x++){if(x>10&&x<20&&y>10&&y<20)continue;data.data[(y*30+x)*4+3]=255;}
       const contours=await quickdraw.traceInSandbox(data,16);return {version:chrome.runtime.getManifest().version,contours:contours.length,toolbar:!!document.getElementById('selection-toolbar')};
     });
-    assert.equal(result.version,'3.7.3');assert.equal(result.contours,2);assert.equal(result.toolbar,true);assert.deepEqual(errors,[]);
+    assert.equal(result.version,'3.7.4');assert.equal(result.contours,2);assert.equal(result.toolbar,true);assert.deepEqual(errors,[]);
   }finally{
     await context?.close();
     const actual=fs.realpathSync(profile);assert.ok(actual.startsWith(prefix));fs.rmSync(actual,{recursive:true,force:true});

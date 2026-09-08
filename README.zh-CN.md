@@ -53,7 +53,7 @@ Quickdraw 不是 Figma，也不是完整的 Photoshop。它把「看网页时顺
 
 ## 快速安装
 
-**最新发行版：[v3.7.3](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.7.3)**，包含宫格预览与拼图、可调整裁剪框及图层快捷键。[下载安装包](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.7.3/quickdraw-sidepanel-v3.7.3.zip)并解压，按下方步骤加载包含 `manifest.json` 的目录。
+**最新发行版：[v3.7.4](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.7.4)**，包含多图导入及所选对象 PNG／SVG 下载。[下载安装包](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.7.4/quickdraw-sidepanel-v3.7.4.zip)并解压，按下方步骤加载包含 `manifest.json` 的目录。
 
 当前以源码加载为主，推荐桌面版 **Chrome 116 或更新版本**。其他 Chromium 浏览器需要具备对应扩展 API，兼容性请实际验证。
 
@@ -86,7 +86,7 @@ GitHub 若显示文件内容，用文件页的 **Download raw file** 下载，�
 
 在普通网页上选中文字，右键选择 **发送选中文字到 Quickdraw**。它会进入画板，接着可以插入图片、放上便签，用画笔和箭头标出关联。网页图片对应 **发送图片到 Quickdraw**；可见页面截图对应 **截取当前可见页面到 Quickdraw**。
 
-浏览器内部页面、部分受限网页或没有访问权限的图片可能无法采集。也可以通过底部图片按钮、拖拽或粘贴导入本地素材。
+浏览器内部页面、部分受限网页或没有访问权限的图片可能无法采集。也可以通过底部图片按钮、拖拽或粘贴导入本地素材。图片选择器支持一次多选，也可以将多个图片文件一起拖到画板上。批量图片会按网格间隔排列并一起选中，仍是独立对象，支持一次撤销。无法读取或过大的文件会提示并跳过，其余图片正常导入；单张上限为 25 MB、5000 万像素。
 
 ### 把 Mermaid 变成可编辑流程图
 
@@ -165,6 +165,7 @@ AI 是可选增强，基础画板不依赖它。当前接入通过相应平台�
 | PNG | 分享、汇报、插入文档 | 导出画板的视觉结果 |
 | 透明 PNG | 素材贴图、叠加排版 | 不包含画布背景 |
 | SVG | 继续矢量排版、缩放展示 | 文字和原生形状保持矢量；图片仍以位图嵌入 |
+| 导出所选为 PNG / SVG | 仅下载当前选中的对象 | 通过画板菜单操作；PNG 为透明背景且不额外添加外围边距，SVG 保留原生矢量并嵌入图片，使用已有导出目录或浏览器下载位置 |
 | `.quickdraw` | 备份、迁移、继续编辑 | 包含项目中的画板及所引用的图片资源 |
 | 当前图片下载 | 取出处理后的素材 | 单张直接下载，多张打包 ZIP；取当前图片而非回溯原图 |
 

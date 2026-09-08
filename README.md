@@ -53,7 +53,7 @@ Quickdraw is not Figma and not Photoshop. It finishes the job of “note it, dra
 
 ## Install
 
-**Latest release: [v3.7.3](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.7.3)** — grid previews and collages, adjustable crop boxes, and layer shortcuts. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.7.3/quickdraw-sidepanel-v3.7.3.zip), extract it, and load the folder containing `manifest.json` using the steps below.
+**Latest release: [v3.7.4](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.7.4)** — multi-image import and selected-object PNG / SVG downloads. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.7.4/quickdraw-sidepanel-v3.7.4.zip), extract it, and load the folder containing `manifest.json` using the steps below.
 
 The public install path is unpacked source. Use desktop **Chrome 116 or newer**. Other Chromium browsers need the matching extension APIs; verify them yourself.
 
@@ -86,7 +86,7 @@ If GitHub shows the file contents, use **Download raw file** and keep the `.quic
 
 On a normal webpage, select text and right-click **发送选中文字到 Quickdraw** (Send selected text to Quickdraw). It lands on the board; you can then drop in images, add notes, and mark relationships with pens and arrows. Images use **发送图片到 Quickdraw**; the visible tab uses **截取当前可见页面到 Quickdraw**.
 
-Chrome internal pages, some restricted sites, and images without granted host access may fail. You can also import local files from the image button, drag-and-drop, or paste.
+Chrome internal pages, some restricted sites, and images without granted host access may fail. You can also import local files from the image button, drag-and-drop, or paste. The image picker supports selecting multiple files, and you can drag several image files onto the canvas at once. A batch is spaced into a grid, selected together, and can be undone in one step. Images stay independent; unreadable or oversized files are reported and skipped while valid images are imported. Each image must be within 25 MB and 50 million pixels.
 
 ### Turn Mermaid into an editable flowchart
 
@@ -164,6 +164,7 @@ The first use asks for site access; new result-image hosts may need another gran
 | PNG | Sharing, slides, documents | Visual snapshot of the board |
 | Transparent PNG | Stickers and overlays | No canvas background |
 | SVG | Vector layout and scaling | Text and native shapes stay vector; rasters embed as bitmaps |
+| Export selection as PNG / SVG | Download only selected objects | Use the board menu; PNG has a transparent background and no added outer margin, SVG retains native vector shapes and embeds images. Saves to the configured export directory or browser download location. |
 | `.quickdraw` | Backup, migration, keep editing | Boards plus referenced image assets |
 | Current image download | Take processed assets out | One file, or a ZIP for many; current image, not the original history |
 

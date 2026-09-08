@@ -4,7 +4,7 @@
 
 - Chinese product name: Quickdraw 侧边栏画板
 - English name: Quickdraw Sidepanel
-- Current manifest version: 3.7.3
+- Current manifest version: 3.7.4
 - Minimum Chrome version: 116
 - License for new extension code: MIT
 - Runtime: vanilla HTML, CSS, and JavaScript; no npm runtime; no tldraw SDK; no bundler required

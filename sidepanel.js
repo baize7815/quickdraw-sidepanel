@@ -1682,13 +1682,13 @@
 
     setupImageHandlers() {
       $('#btn-upload-img').addEventListener('click',()=>$('#file-input').click());
-      $('#file-input').addEventListener('change',e=>{const f=e.target.files?.[0];if(f)this.insertImage(f).catch(error=>this.handleImageError(error));e.target.value='';});
+      $('#file-input').addEventListener('change',e=>{const files=Array.from(e.target.files||[]);e.target.value='';if(files.length)this.insertImages(files).catch(error=>this.handleImageError(error));});
       window.addEventListener('paste',e=>{
         if(e.defaultPrevented||this.isTextEditingTarget(e.target)||this.isTextEditingTarget(document.activeElement)||$$('[role="dialog"]').some(dialog=>!dialog.hidden))return;
         for(const item of e.clipboardData?.items||[]){if(item.type.startsWith('image/')){const f=item.getAsFile();if(f){e.preventDefault();this.insertImage(f).catch(error=>this.handleImageError(error));return;}}}
       });
       this.container.addEventListener('dragover',e=>{e.preventDefault();});
-      this.container.addEventListener('drop',e=>{e.preventDefault();const p=this.eventPos(e);const f=[...(e.dataTransfer?.files||[])].find(x=>x.type.startsWith('image/'));if(f)this.insertImage(f,p.x,p.y).catch(error=>this.handleImageError(error));else{const u=(e.dataTransfer?.getData('text/uri-list')||e.dataTransfer?.getData('text/plain')||'').trim();if(u)this.insertRemoteImage(u,p.x,p.y);}});
+      this.container.addEventListener('drop',e=>{e.preventDefault();const p=this.eventPos(e);const files=Array.from(e.dataTransfer?.files||[]);if(files.length)this.insertImages(files,p.x,p.y).catch(error=>this.handleImageError(error));else{const u=(e.dataTransfer?.getData('text/uri-list')||e.dataTransfer?.getData('text/plain')||'').trim();if(u)this.insertRemoteImage(u,p.x,p.y);}});
       if(globalThis.chrome?.storage?.onChanged)chrome.storage.onChanged.addListener((changes,area)=>{
         const key=this.pendingCaptureKey();
         if(area==='session'&&changes[key]?.newValue)this.consumePendingCapture(changes[key].newValue);
@@ -1931,26 +1931,47 @@
         if (w > max || h > max) { const scale = Math.min(max / w, max / h); w *= scale; h *= scale; }
         prepared.push({ item, assetId, w, h });
       }
-      const gap = 24;
-      const totalWidth = prepared.reduce((sum, item) => sum + item.w, 0) + gap * Math.max(0, prepared.length - 1);
-      const maxHeight = Math.max(...prepared.map(item => item.h));
-      let cursorX = x, cursorY = y;
-      if (cursorX == null || cursorY == null) {
-        cursorX = (this.width / 2 - this.offsetX) / this.scale - totalWidth / 2;
-        cursorY = (this.height / 2 - this.offsetY) / this.scale - maxHeight / 2;
-      }
-      const elements = prepared.map(({ item, assetId, w, h }) => {
-        const element = { id: newId(), type: 'image', assetId, x: cursorX, y: cursorY, w, h, sourceUrl: String(item.imageUrl || meta.sourceUrl || '') };
-        cursorX += w + gap;
-        this.elements.push(element);
-        this.getCachedImage(element);
-        return element;
+      if(meta.boardId!==undefined&&(this.boardLoading||this.currentFileId!==meta.boardId||this.aiBoardEpoch!==meta.boardEpoch))throw new Error('import-context-changed');
+      const gap=24,columns=meta.layout==='grid'?Math.ceil(Math.sqrt(prepared.length)):prepared.length;
+      const cellW=Math.max(...prepared.map(item=>item.w)),cellH=Math.max(...prepared.map(item=>item.h));
+      const totalWidth=meta.layout==='grid'?columns*cellW+gap*(columns-1):prepared.reduce((sum,item)=>sum+item.w,0)+gap*(prepared.length-1);
+      const totalHeight=meta.layout==='grid'?Math.ceil(prepared.length/columns)*cellH+gap*(Math.ceil(prepared.length/columns)-1):cellH;
+      const startX=x??((this.width/2-this.offsetX)/this.scale-totalWidth/2),startY=y??((this.height/2-this.offsetY)/this.scale-totalHeight/2);
+      let cursorX=startX;
+      const elements=prepared.map(({item,assetId,w,h},i)=>{
+        const element={id:newId(),type:'image',assetId,x:meta.layout==='grid'?startX+(i%columns)*(cellW+gap):cursorX,y:meta.layout==='grid'?startY+Math.floor(i/columns)*(cellH+gap):startY,w,h,sourceUrl:String(item.imageUrl||meta.sourceUrl||'')};
+        cursorX+=w+gap;this.elements.push(element);this.getCachedImage(element);return element;
       });
       this.setSelection(elements, false);
       this.setTool('select');
       this.commit();
       this.render();
       return elements;
+    }
+
+    async insertImages(files,x,y){
+      const boardId=this.currentFileId,boardEpoch=this.aiBoardEpoch,prepared=[],failed=[];
+      const current=()=>!this.boardLoading&&this.currentFileId===boardId&&this.aiBoardEpoch===boardEpoch;
+      const types={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',svg:'image/svg+xml',avif:'image/avif',bmp:'image/bmp',ico:'image/x-icon'};
+      let inserted=false;
+      try{
+        for(const file of files){
+          if(!current())throw new Error('import-context-changed');
+          try{
+            const type=file.type||types[String(file.name||'').split('.').pop().toLowerCase()]||'';
+            if(!type.startsWith('image/'))throw new Error('invalid-type');
+            const blob=file.type?file:file.slice(0,file.size,type),dimensions=await this.decodeImageBlob(blob);
+            if(!current())throw new Error('import-context-changed');
+            const assetId=await this.store.putAsset(blob,{name:file.name||''});prepared.push({assetId,imageWidth:dimensions.width,imageHeight:dimensions.height});
+          }catch(error){if(error.message==='import-context-changed')throw error;failed.push({name:file.name||'未命名文件',reason:String(error.message||'')});}
+        }
+        if(!current())throw new Error('import-context-changed');
+        const elements=prepared.length?await this.insertStoredImages(prepared,x,y,{layout:'grid',boardId,boardEpoch}):[];inserted=true;
+        const detail=failed.length?`；${failed.length} 个文件未导入（${failed.slice(0,3).map(f=>f.name).join('、')}${failed.length>3?'等':''}）。${failed.some(f=>f.reason.includes('large'))?'单张需在 25 MB、5000 万像素以内。':'请检查图片格式或文件是否损坏。'}`:'';
+        this.toast(elements.length?`已导入 ${elements.length} 张图片，可逐张移动或一次撤销${detail}`:`没有可导入的图片${detail}`);
+        return elements;
+      }catch(error){if(error.message==='import-context-changed'){this.toast('导入期间画板已切换，本批图片未写入，请在目标画板重新导入。');return [];}throw error;}
+      finally{if(!inserted)for(const item of prepared)if(!this.elements.some(el=>el.assetId===item.assetId))await this.store.deleteAsset(item.assetId).catch(()=>{});}
     }
 
     async insertImage(source,x,y,meta={}){
@@ -2111,8 +2132,8 @@
       $('#btn-export-transparent').addEventListener('click',()=>{this.exportPNG(true);this.closePopovers();});
       $('#btn-export-svg').addEventListener('click',()=>{this.exportSVG();this.closePopovers();});
       $('#btn-export-directory').addEventListener('click',()=>this.setDefaultExportDirectory());
-      $('#btn-copy-png').addEventListener('click',()=>{this.copyPNG();this.closePopovers();});
-      $('#btn-copy-svg').addEventListener('click',()=>{this.copySVG();this.closePopovers();});
+      $('#btn-copy-png').addEventListener('click',()=>{this.exportSelection('png');this.closePopovers();});
+      $('#btn-copy-svg').addEventListener('click',()=>{this.exportSelection('svg');this.closePopovers();});
       $('#btn-export-project').addEventListener('click',()=>{this.exportProject();this.closePopovers();});
       $('#btn-import-project').addEventListener('click',()=>{$('#project-input').click();this.closePopovers();});
       $('#project-input').addEventListener('change',e=>{const file=e.target.files?.[0];if(file)this.importProject(file);e.target.value='';});
@@ -2732,9 +2753,9 @@
       let y=el.y+12,markup='';for(const row of rows){const lh=row.size*1.35;if(y+lh>el.y+h-6)break;markup+=`<text x="${n(el.x+12)}" y="${n(y)}" fill="${esc(fg)}" font-size="${n(row.size)}" font-family="system-ui,Segoe UI,Arial,sans-serif" dominant-baseline="text-before-edge">${row.segments.map((segment,index)=>`<tspan${index?'' : ` x="${n(el.x+12)}"`} font-weight="${segment.bold?700:row.weight}" font-style="${segment.italic?'italic':'normal'}" font-family="${segment.code?'ui-monospace,Consolas,monospace':'system-ui,Segoe UI,Arial,sans-serif'}" fill="${segment.link?'#2f6fed':esc(fg)}">${esc(segment.text||' ')}</tspan>`).join('')}</text>`;y+=lh;}return`<g><rect x="${n(el.x)}" y="${n(el.y)}" width="${n(w)}" height="${n(h)}" fill="${esc(bg)}"/>${markup}</g>`;
     }
 
-    svgMindConnectionsMarkup() {
+    svgMindConnectionsMarkup(items=this.elements) {
       const n=v=>this.svgNum(v),esc=v=>this.xmlEscape(v),out=[],paper=this.theme==='dark'?'#191713':'#F9FAFB';
-      for(const edge of this.elements){
+      for(const edge of items){
         if(edge.type!=='mindedge'||!this.isElementVisible(edge))continue;const pts=this.mindEdgeSamplePoints(edge);if(pts.length<2)continue;const stroke=edge.color||(this.theme==='dark'?'#9aa3ad':'#7d8794'),d=pts.map((p,i)=>`${i?'L':'M'} ${n(p.x)} ${n(p.y)}`).join(' ');
         out.push(`<path d="${d}" fill="none" stroke="${esc(stroke)}" stroke-width="${n(edge.size||1.6)}" stroke-linecap="round" stroke-linejoin="round"/>`);
         if(edge.arrow){let i=pts.length-2;while(i>0&&Math.hypot(pts.at(-1).x-pts[i].x,pts.at(-1).y-pts[i].y)<.01)i--;const a=pts[i],b=pts.at(-1),ang=Math.atan2(b.y-a.y,b.x-a.x),len=10,a1={x:b.x-len*Math.cos(ang-.55),y:b.y-len*Math.sin(ang-.55)},a2={x:b.x-len*Math.cos(ang+.55),y:b.y-len*Math.sin(ang+.55)};out.push(`<path d="M ${n(a1.x)} ${n(a1.y)} L ${n(b.x)} ${n(b.y)} L ${n(a2.x)} ${n(a2.y)}" fill="none" stroke="${esc(stroke)}" stroke-width="${n(edge.size||1.6)}" stroke-linecap="round" stroke-linejoin="round"/>`);}
@@ -2783,13 +2804,14 @@
       return '';
     }
 
-    async createSVGDocument(transparent=false) {
-      await this.waitForImages();
-      this.exportAssetData=new Map();for(const el of this.elements.filter(item=>item.type==='image'&&item.assetId)){const asset=await this.store.getAsset(el.assetId);if(asset?.blob)this.exportAssetData.set(el.assetId,await this.store.blobToDataUrl(asset.blob));}
-      const b=this.contentBounds()||{x:(-this.offsetX)/this.scale,y:(-this.offsetY)/this.scale,w:this.width/this.scale,h:this.height/this.scale},pad=32,x=b.x-pad,y=b.y-pad,w=Math.max(1,b.w+pad*2),h=Math.max(1,b.h+pad*2),paper=this.theme==='dark'?'#191713':'#F9FAFB';
-      const patternColors=[...new Set(this.elements.filter(el=>this.isElementVisible(el)&&el.fill==='pattern').map(el=>el.color||this.currentColor))],defs=`<defs>${patternColors.map(color=>`<pattern id="${this.patternId(color)}" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="${this.xmlEscape(color)}" stroke-width="1.2" opacity=".35"/></pattern>`).join('')}</defs>`;
+    async createSVGDocument(transparent=false,requested=null) {
+      const items=this.exportElementsFor(requested);if(requested&&!items.length)throw new Error('empty-export');
+      await this.waitForImages(items);
+      this.exportAssetData=new Map();for(const el of items.filter(item=>item.type==='image'&&item.assetId)){const asset=await this.store.getAsset(el.assetId);if(asset?.blob)this.exportAssetData.set(el.assetId,await this.store.blobToDataUrl(asset.blob));}
+      const b=this.getElementsBBox(items)||{x:(-this.offsetX)/this.scale,y:(-this.offsetY)/this.scale,w:this.width/this.scale,h:this.height/this.scale},pad=32,x=b.x-pad,y=b.y-pad,w=Math.max(1,b.w+pad*2),h=Math.max(1,b.h+pad*2),paper=this.theme==='dark'?'#191713':'#F9FAFB';
+      const patternColors=[...new Set(items.filter(el=>el.fill==='pattern').map(el=>el.color||this.currentColor))],defs=`<defs>${patternColors.map(color=>`<pattern id="${this.patternId(color)}" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="${this.xmlEscape(color)}" stroke-width="1.2" opacity=".35"/></pattern>`).join('')}</defs>`;
       const background=transparent?'':`<rect x="${this.svgNum(x)}" y="${this.svgNum(y)}" width="${this.svgNum(w)}" height="${this.svgNum(h)}" fill="${paper}"/>`;
-      const body=this.svgMindConnectionsMarkup()+this.elements.filter(el=>this.isElementVisible(el)).map(el=>this.svgElementMarkup(el)).join('');
+      const body=this.svgMindConnectionsMarkup(items)+items.map(el=>this.svgElementMarkup(el)).join('');
       return {svg:`<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${this.svgNum(w)}" height="${this.svgNum(h)}" viewBox="${this.svgNum(x)} ${this.svgNum(y)} ${this.svgNum(w)} ${this.svgNum(h)}">${defs}${background}${body}</svg>`,width:w,height:h};
     }
 
@@ -2830,15 +2852,22 @@
     exportElementsFor(requested=null){
       if(!requested)return this.elements.filter(el=>this.isElementVisible(el));
       const source=requested.filter(el=>this.elements.includes(el)&&this.isElementVisible(el)),ids=new Set(source.map(el=>el.id)),nodeIds=new Set(source.filter(el=>el.type==='mindnode').map(el=>el.id));
-      for(const edge of this.elements)if(edge.type==='mindedge'&&this.isElementVisible(edge)&&(ids.has(edge.id)||(nodeIds.has(edge.fromId)&&nodeIds.has(edge.toId)))&&!ids.has(edge.id)){source.unshift(edge);ids.add(edge.id);}
-      return source;
+      for(const edge of this.elements)if(edge.type==='mindedge'&&this.isElementVisible(edge)&&(ids.has(edge.id)||(nodeIds.has(edge.fromId)&&nodeIds.has(edge.toId)))&&!ids.has(edge.id)){ids.add(edge.id);}
+      return this.elements.filter(el=>ids.has(el.id));
     }
 
     async waitForImages(items=this.elements){await Promise.all(items.filter(e=>e.type==='image').map(e=>new Promise(resolve=>{const img=this.getCachedImage(e);if(img?.complete&&img.naturalWidth)return resolve();const done=()=>resolve();img?.addEventListener('load',done,{once:true});img?.addEventListener('error',done,{once:true});setTimeout(done,2000);})));}
 
-    async createPNGBlob(transparent=false,requested=null){
+    async createPNGBlob(transparent=false,requested=null,padding=32){
       const items=this.exportElementsFor(requested);if(!items.length)throw new Error('empty-export');await this.waitForImages(items);this.exporting=true;
-      try{const b=this.getElementsBBox(items)||{x:(-this.offsetX)/this.scale,y:(-this.offsetY)/this.scale,w:this.width/this.scale,h:this.height/this.scale},pad=32,scale=2,width=Math.ceil((b.w+pad*2)*scale),height=Math.ceil((b.h+pad*2)*scale);if(width>32767||height>32767||width*height>120_000_000)throw new Error('canvas-too-large');const c=document.createElement('canvas');c.width=width;c.height=height;const ctx=c.getContext('2d');if(!ctx)throw new Error('canvas-unavailable');if(!transparent){ctx.fillStyle=this.theme==='dark'?'#191713':'#F9FAFB';ctx.fillRect(0,0,c.width,c.height);}ctx.save();ctx.scale(scale,scale);ctx.translate(-b.x+pad,-b.y+pad);for(const edge of items)if(edge.type==='mindedge')this.drawMindEdge(ctx,edge,false);for(const el of items)if(el.type!=='mindedge')this.drawElement(ctx,el);ctx.restore();return await new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error('png-encode-failed')),'image/png'));}finally{this.exporting=false;}
+      try{const b=this.getElementsBBox(items)||{x:(-this.offsetX)/this.scale,y:(-this.offsetY)/this.scale,w:this.width/this.scale,h:this.height/this.scale},pad=padding,scale=2,width=Math.ceil((b.w+pad*2)*scale),height=Math.ceil((b.h+pad*2)*scale);if(width>32767||height>32767||width*height>120_000_000)throw new Error('canvas-too-large');const c=document.createElement('canvas');c.width=width;c.height=height;const ctx=c.getContext('2d');if(!ctx)throw new Error('canvas-unavailable');if(!transparent){ctx.fillStyle=this.theme==='dark'?'#191713':'#F9FAFB';ctx.fillRect(0,0,c.width,c.height);}ctx.save();ctx.scale(scale,scale);ctx.translate(-b.x+pad,-b.y+pad);for(const edge of items)if(edge.type==='mindedge')this.drawMindEdge(ctx,edge,false);for(const el of items)if(el.type!=='mindedge')this.drawElement(ctx,el);ctx.restore();return await new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error('png-encode-failed')),'image/png'));}finally{this.exporting=false;}
+    }
+
+    async exportSelection(format){
+      const items=this.getSelectedElements();if(!items.length){this.toast('请先选择要导出的对象。');return;}
+      const filename=`${this.exportBaseName()}-所选.${format}`;
+      try{const blob=format==='svg'?new Blob([(await this.createSVGDocument(true,items)).svg],{type:'image/svg+xml;charset=utf-8'}):await this.createPNGBlob(true,items,0);await this.downloadBlob(blob,filename);this.toast(`所选对象已导出为 ${format.toUpperCase()}。`);}
+      catch(error){console.error(error);this.toast(error.message==='canvas-too-large'?'导出范围过大，请缩小对象间距后重试。':'所选对象导出失败，请重试。');}
     }
 
     async exportPNG(transparent=false){try{const blob=await this.createPNGBlob(transparent);await this.downloadBlob(blob,`${this.exportBaseName()}.png`);}catch(error){console.error(error);this.toast(error?.message==='canvas-too-large'?'导出范围过大，请缩小对象间距后重试。':'PNG 导出失败。');}}
