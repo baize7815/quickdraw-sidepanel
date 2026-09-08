@@ -22,6 +22,22 @@ test('不能整除的宫格不会遗漏或重复像素',()=>{
   for(const c of cells)for(let y=c.y;y<c.y+c.h;y++)for(let x=c.x;x<c.x+c.w;x++)coverage[y*101+x]++;
   assert.ok(coverage.every(n=>n===1));assert.throws(()=>V.gridCells(10,10,0,3));assert.throws(()=>V.gridCells(10,10,11,1));assert.throws(()=>V.gridCells(100,100,11,10));
 });
+test('宫格正间距留出内部空隙，负间距产生受边界限制的重叠',()=>{
+  assert.deepEqual(V.gridCells(10,8,2,2,2),[
+    {x:0,y:0,w:4,h:3},{x:6,y:0,w:4,h:3},
+    {x:0,y:5,w:4,h:3},{x:6,y:5,w:4,h:3}
+  ]);
+  assert.deepEqual(V.gridCells(10,8,2,2,-2),[
+    {x:0,y:0,w:6,h:5},{x:4,y:0,w:6,h:5},
+    {x:0,y:3,w:6,h:5},{x:4,y:3,w:6,h:5}
+  ]);
+  for(const gap of [NaN,Infinity,-Infinity,1.5])assert.throws(()=>V.gridCells(10,8,2,2,gap));
+  assert.throws(()=>V.gridCells(10,8,2,2,10));
+  for(const cell of V.gridCells(10,8,2,2,-100)){
+    assert.ok(cell.x>=0&&cell.y>=0&&cell.x+cell.w<=10&&cell.y+cell.h<=8);
+    assert.ok(cell.w>0&&cell.h>0);
+  }
+});
 test('路径保留贝塞尔控制点和多个闭合孔洞',()=>{
   const el={paths:[{closed:true,nodes:[{x:0,y:0,out:{x:30,y:-20}},{x:100,y:0,in:{x:60,y:20}},{x:50,y:50}]},{closed:true,nodes:[{x:10,y:10},{x:20,y:10},{x:15,y:20}]}],stroke:'none'};
   const d=V.pathData(el);assert.match(d,/C30 -20 60 20 100 0/);assert.equal((d.match(/ Z/g)||[]).length,2);assert.equal(V.pathBounds(el).y,-20);

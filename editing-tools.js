@@ -24,6 +24,7 @@
       for(const [selector,title,icon] of [['#btn-layout-mind','自动整理分支','M3 10h5v5H3zM16 3h5v5h-5zM16 16h5v5h-5zM8 12h4M12 5v14M12 5h4M12 19h4'],['#btn-collapse-mind','折叠 / 展开分支','M4 4h16v16H4zM8 12h8M12 8v8']]){const b=$(selector);b.innerHTML=svg(`<path d="${icon}"/>`);b.title=title;b.setAttribute('aria-label',title);b.classList.add('arrange-icon');}
       const action=document.createElement('div');action.className='image-extra-actions';
       action.innerHTML=button('grid','宫格切图（列 × 行）','<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>')+button('trace-menu','透明轮廓转 SVG 形状','<path d="M5 7c-3 5 0 12 5 12 7 0 11-5 8-11-3-6-10-6-13-1z"/><rect x="3" y="5" width="4" height="4"/><rect x="16" y="6" width="4" height="4"/><rect x="8" y="17" width="4" height="4"/>');
+      action.insertAdjacentHTML('beforeend',button('stitch-grid','宫格拼图','<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/>'));
       $('.actionbar').append(action);
       const root=document.createElement('div');root.id='editing-ui';root.innerHTML=`
         <div id="selection-toolbar" class="selection-toolbar" role="toolbar" aria-label="对象变换与遮罩" hidden>
@@ -38,17 +39,22 @@
           ${button('rotate','顺时针旋转 90° · 也可拖拽选框四角外侧','<path d="M19 9A8 8 0 1 0 20 15M19 3v6h-6"/>')}
           <div id="vector-style" hidden><label title="矢量填充颜色">填充<input id="vector-fill" type="color" value="#1f1f1f" aria-label="矢量填充颜色"></label><label title="矢量描边颜色">描边<input id="vector-stroke" type="color" value="#1f1f1f" aria-label="矢量描边颜色"></label>${button('edit-nodes','编辑钢笔锚点','<path d="M4 18C4 3 20 21 20 6"/><rect x="2" y="16" width="4" height="4"/><rect x="18" y="4" width="4" height="4"/>')}</div>
         </div>
-        <div id="crop-popover" class="popover image-options" hidden aria-label="图片裁剪设置"><strong>裁剪比例</strong><div class="preset-grid">${['自由','1:1','9:16','16:9','3:4','4:3'].map(r=>`<button data-crop-ratio="${r}">${r}</button>`).join('')}</div><form id="crop-custom"><label>宽<input name="width" type="number" min="0.01" step="any" value="1" required aria-label="自定义裁剪宽"></label><span>×</span><label>高<input name="height" type="number" min="0.01" step="any" value="1" required aria-label="自定义裁剪高"></label><button type="submit">开始</button></form><p>拖框保留内容 · Esc 取消</p></div>
-        <div id="grid-popover" class="popover image-options" hidden aria-label="宫格切图设置"><strong>宫格切图 · 列 × 行</strong><div class="preset-grid">${['2×1','1×2','2×2','3×3'].map(r=>`<button data-grid="${r}">${r}</button>`).join('')}</div><form id="grid-custom"><label>列<input name="cols" type="number" min="1" max="100" value="2" required aria-label="切图列数"></label><span>×</span><label>行<input name="rows" type="number" min="1" max="100" value="2" required aria-label="切图行数"></label><button type="submit">切割</button></form><p>最多 100 块，每块可独立移动；支持撤销。</p></div>
+        <div id="crop-popover" class="popover image-options" hidden aria-label="图片裁剪设置"><strong>裁剪比例</strong><div class="preset-grid">${['自由','1:1','9:16','16:9','3:4','4:3'].map(r=>`<button data-crop-ratio="${r}">${r}</button>`).join('')}</div><form id="crop-custom"><label>宽<input name="width" type="number" min="0.01" step="any" value="1" required aria-label="自定义裁剪宽"></label><span>×</span><label>高<input name="height" type="number" min="0.01" step="any" value="1" required aria-label="自定义裁剪高"></label><button type="submit">开始</button></form><p>拖框后可调整 · 框内双击确认 · Esc 取消</p></div>
+        <div id="grid-popover" class="popover image-options grid-editor" hidden role="dialog" aria-label="宫格图片编辑">
+          <div class="grid-preview-stage"><canvas id="grid-preview" aria-label="宫格实时预览"></canvas></div>
+          <div class="grid-settings"><div class="grid-heading"><strong id="grid-title">宫格切图</strong><button type="button" data-edit="close-grid" aria-label="关闭宫格预览">×</button></div>
+          <div class="preset-grid">${['1×2','2×1','2×2','2×3','3×2','3×3'].map(r=>`<button type="button" data-grid="${r}">${r}</button>`).join('')}</div>
+          <form id="grid-custom"><label>横向列数<input name="cols" type="number" min="1" max="100" value="2" required aria-label="切图列数"></label><label>纵向行数<input name="rows" type="number" min="1" max="100" value="2" required aria-label="切图行数"></label><label>间距（px）<input name="gap" type="number" step="1" value="0" required aria-label="宫格间距"></label><p id="grid-help"></p><p id="grid-status" role="status" aria-live="polite"></p><button id="grid-apply" type="submit" class="primary-button">切割</button></form></div></div>
         <div id="trace-popover" class="popover image-options" hidden aria-label="透明轮廓提取"><strong>透明轮廓 → 矢量形状</strong><label class="trace-threshold">透明度阈值<input id="trace-threshold" type="number" min="1" max="255" value="16" aria-label="透明度阈值"></label><p>保留内部孔洞，原图保留。无透明背景时仅提取外框。</p><button data-edit="trace" class="primary-button">生成 SVG 形状</button></div>
         `;
       this.app.append(root);
       root.addEventListener('pointerdown',e=>e.stopPropagation());action.addEventListener('pointerdown',e=>e.stopPropagation());
       const dispatch=e=>{const b=e.target.closest('[data-edit]');if(b)this.handleEditingAction(b.dataset.edit);};root.addEventListener('click',dispatch);action.addEventListener('click',dispatch);
       for(const b of root.querySelectorAll('[data-crop-ratio]'))b.addEventListener('click',()=>{const parts=b.dataset.cropRatio.split(':').map(Number);this.beginRatioCrop(parts.length===2?parts[0]/parts[1]:0);});
-      for(const b of root.querySelectorAll('[data-grid]'))b.addEventListener('click',()=>this.splitImageGrid(...b.dataset.grid.split('×').map(Number)));
+      for(const b of root.querySelectorAll('[data-grid]'))b.addEventListener('click',()=>{const [cols,rows]=b.dataset.grid.split('×');const f=$('#grid-custom');f.elements.cols.value=cols;f.elements.rows.value=rows;this.refreshGridPreview();});
+      $('#grid-custom').addEventListener('input',()=>this.refreshGridPreview());
       $('#crop-custom').addEventListener('submit',e=>{e.preventDefault();const f=e.target;this.beginRatioCrop(Number(f.elements.width.value)/Number(f.elements.height.value));});
-      $('#grid-custom').addEventListener('submit',e=>{e.preventDefault();const f=e.target;this.splitImageGrid(Number(f.elements.cols.value),Number(f.elements.rows.value));});
+      $('#grid-custom').addEventListener('submit',e=>{e.preventDefault();const f=e.target;const args=[Number(f.elements.cols.value),Number(f.elements.rows.value),Number(f.elements.gap.value)];if(this.gridMode==='stitch')this.stitchImageGrid(...args);else this.splitImageGrid(...args);});
       for(const [selector,key] of [['#vector-fill','fillColor'],['#vector-stroke','strokeColor']])$(selector).addEventListener('change',e=>{
         for(const el of this.getSelectedElements().filter(el=>el.type==='path')){el[key]=e.target.value;if(key==='fillColor')el.fill='solid';else el.stroke='solid';}this.commit();this.render();
       });
@@ -58,18 +64,21 @@
     updateEditingUI(){
       if(typeof document==='undefined'||!$('#selection-toolbar'))return;
       const selected=this.getSelectedElements(),oneImage=selected.length===1&&selected[0].type==='image',busy=!!(this.editingBusy||this.backgroundRemovalInProgress||this.watermarkRemovalInProgress);
-      $('.image-extra-actions').hidden=!oneImage;
+      const imageGroup=this.getImageGridGroup();
+      $('.image-extra-actions').hidden=!oneImage&&!imageGroup.length;
+      for(const b of $('.image-extra-actions').querySelectorAll('[data-edit]'))b.hidden=b.dataset.edit==='stitch-grid'?!imageGroup.length:!oneImage;
       $('#selection-toolbar').hidden=!selected.length||!!this.cropTarget||!!this.watermarkTarget;
       const canMask=selected.length===2&&selected.filter(el=>el.type==='image').length===1&&selected.some(el=>shapeTypes.has(el.type));
       $('.mask-actions').hidden=!canMask;
       const paths=selected.filter(el=>el.type==='path');$('#vector-style').hidden=!paths.length;
       for(const [selector,key] of [['#vector-fill','fillColor'],['#vector-stroke','strokeColor']]){const input=$(selector);if(paths.length&&document.activeElement!==input)input.value=paths.at(-1)[key]||paths.at(-1).color||'#1f1f1f';}
       for(const b of document.querySelectorAll('[data-edit]'))b.disabled=busy;
-      for(const popover of document.querySelectorAll('.image-options')){if(!oneImage)popover.hidden=true;for(const control of popover.querySelectorAll('button,input'))control.disabled=busy;}
+      for(const popover of document.querySelectorAll('.image-options')){if(popover.id==='grid-popover'){const targets=this.gridMode==='stitch'?imageGroup:(oneImage?selected:[]);if(!targets.length||JSON.stringify(targets)!==this.gridTargetState)popover.hidden=true;}else if(!oneImage)popover.hidden=true;for(const control of popover.querySelectorAll('button,input'))control.disabled=busy||(control.id==='grid-apply'&&!this.gridPreviewReady);}
     },
 
     handleEditingAction(action){
-      if(action==='grid')return this.toggleEditingPopover('grid-popover');
+      if(action==='close-grid')return this.closePopovers();
+      if(action==='grid'||action==='stitch-grid')return this.openGridEditor(action==='grid'?'split':'stitch');
       if(action==='trace-menu')return this.toggleEditingPopover('trace-popover');
       if(action==='trace')return this.traceImageOutline();
       if(action==='edit-nodes'){this.setTool('pen');this.render();return;}
@@ -143,13 +152,82 @@
       finally{this.editingBusy=false;this.updateEditingUI();}
     },
 
-    async splitImageGrid(cols,rows){
+    getImageGridGroup(){
+      const selected=this.getSelectedElements(),groupId=selected[0]?.groupId;
+      if(selected.length<2||!groupId||selected.some(el=>el.type!=='image'||el.groupId!==groupId))return [];
+      const members=this.elements.filter(el=>el.groupId===groupId);
+      return members.length===selected.length&&members.every(el=>selected.includes(el))?members:[];
+    },
+    openGridEditor(mode){
+      const targets=mode==='stitch'?this.getImageGridGroup():this.getSelectedElements();
+      if(!targets.length||(mode==='split'&&(targets.length!==1||targets[0].type!=='image')))return;
+      this.closePopovers();this.gridMode=mode;this.gridTargetState=JSON.stringify(targets);
+      const f=$('#grid-custom');if(mode==='stitch'){f.elements.cols.value=Math.ceil(Math.sqrt(targets.length));f.elements.rows.value=Math.ceil(targets.length/Number(f.elements.cols.value));}
+      $('#grid-title').textContent=mode==='stitch'?'宫格拼图':'宫格切图';$('#grid-apply').textContent=mode==='stitch'?'生成拼图':'确认切割';
+      $('#grid-help').textContent=mode==='stitch'?'按画布从上到下、从左到右排列；等大格内完整显示图片。正数留透明间距，负数重叠，后图覆盖前图。生成新图片，原群组保留。':'间距按原图像素计算：0 无缝，正数跳过格间区域，负数让相邻切片重叠。最多 100 块，支持撤销。';
+      $('#grid-popover').hidden=false;this.refreshGridPreview();
+    },
+    async loadGridSources(targets){
+      const sources=[];
+      try{for(const target of targets){const el=clone(target),record=await this.store.getAsset(el.assetId);if(!record?.blob)throw new Error('图片资源不存在。');const source=await this.loadCropDrawable(record.blob);sources.push({el,source});}return sources;}
+      catch(error){for(const {source} of sources)source.dispose();throw error;}
+    },
+    gridStitchLayout(sources,cols,rows,gap){
+      if(!Number.isInteger(cols)||!Number.isInteger(rows)||cols<1||rows<1||cols*rows>100||cols*rows<sources.length)throw new Error('行列需为正整数，格数需容纳全部图片，且最多 100 格。');
+      if(!Number.isInteger(gap))throw new Error('间距需为整数像素。');
+      const tiles=sources.map(item=>{const b=this.getElementBBox(item.el),m=V.matrix(item.el),density=Math.min(item.source.width/(Math.abs(item.el.w)*Math.hypot(m[0],m[1])),item.source.height/(Math.abs(item.el.h)*Math.hypot(m[2],m[3])));return {...item,b,density,w:b.w*density,h:b.h*density};});
+      // Form visual rows before sorting horizontally; slight vertical offsets remain in the same row.
+      const pending=[...tiles].sort((a,b)=>a.b.y-b.b.y||a.b.x-b.b.x),ordered=[];
+      while(pending.length){const first=pending.shift(),row=[first];for(let i=0;i<pending.length;){if(pending[i].b.y-first.b.y<Math.min(first.b.h,pending[i].b.h)/2)row.push(...pending.splice(i,1));else i++;}ordered.push(...row.sort((a,b)=>a.b.x-b.b.x));}
+      const cellW=Math.ceil(Math.max(...tiles.map(t=>t.w))),cellH=Math.ceil(Math.max(...tiles.map(t=>t.h)));
+      if((cols>1&&cellW+gap<1)||(rows>1&&cellH+gap<1))throw new Error('重叠过大，相邻格子需至少相隔 1 像素。');
+      const width=cols*cellW+(cols-1)*gap,height=rows*cellH+(rows-1)*gap;
+      if(!Number.isFinite(width*height)||width<1||height<1||width>16384||height>16384||width*height>12_000_000)throw new Error('拼图超过 1200 万像素或单边 16384 像素，请减少行列或缩小间距。');
+      return {width,height,tiles:ordered.map((t,i)=>({...t,x:(i%cols)*(cellW+gap),y:Math.floor(i/cols)*(cellH+gap),cellW,cellH}))};
+    },
+    drawGridStitch(ctx,layout){
+      for(const t of layout.tiles){const fit=Math.min(t.cellW/t.w,t.cellH/t.h);ctx.save();ctx.translate(t.x+(t.cellW-t.w*fit)/2,t.y+(t.cellH-t.h*fit)/2);ctx.scale(t.density*fit,t.density*fit);ctx.translate(-t.b.x,-t.b.y);ctx.transform(...V.matrix(t.el));ctx.drawImage(t.source.drawable,t.el.x,t.el.y,t.el.w,t.el.h);ctx.restore();}
+    },
+    async refreshGridPreview(){
+      const token=this.gridPreviewToken=(this.gridPreviewToken||0)+1,mode=this.gridMode,f=$('#grid-custom'),cols=Number(f.elements.cols.value),rows=Number(f.elements.rows.value),gap=Number(f.elements.gap.value),status=$('#grid-status'),apply=$('#grid-apply'),canvas=$('#grid-preview');
+      this.gridPreviewReady=false;apply.disabled=true;status.textContent='正在加载预览…';canvas.width=1;canvas.height=1;
+      for(const b of document.querySelectorAll('[data-grid]')){const active=b.dataset.grid===`${cols}×${rows}`;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));}
+      let sources=[];
+      try{
+        if(!f.checkValidity())throw new Error('请填写有效的行数、列数和整数间距。');
+        const targets=mode==='stitch'?this.getImageGridGroup():this.getSelectedElements();if(!targets.length)throw new Error('请重新选择图片。');
+        sources=await this.loadGridSources(targets);
+        if(token!==this.gridPreviewToken||$('#grid-popover').hidden)return;
+        const {source,el}=sources[0],layout=mode==='stitch'?this.gridStitchLayout(sources,cols,rows,gap):null,cells=layout?null:V.gridCells(source.width,source.height,cols,rows,gap),bounds=this.getElementBBox(el),m=V.matrix(el),density=Math.min(source.width/(Math.abs(el.w)*Math.hypot(m[0],m[1])),source.height/(Math.abs(el.h)*Math.hypot(m[2],m[3]))),width=layout?.width||bounds.w*density,height=layout?.height||bounds.h*density,scale=Math.min(1,1400/width,1000/height);
+        canvas.width=Math.max(1,Math.round(width*scale));canvas.height=Math.max(1,Math.round(height*scale));const ctx=canvas.getContext('2d');ctx.scale(canvas.width/width,canvas.height/height);
+        if(layout)this.drawGridStitch(ctx,layout);
+        else{
+          ctx.scale(density,density);ctx.translate(-bounds.x,-bounds.y);ctx.transform(...m);ctx.translate(el.x,el.y);ctx.scale(el.w/source.width,el.h/source.height);
+          ctx.globalAlpha=.25;ctx.drawImage(source.drawable,0,0);ctx.globalAlpha=1;
+          for(const c of cells){ctx.drawImage(source.drawable,c.x,c.y,c.w,c.h,c.x,c.y,c.w,c.h);ctx.fillStyle='rgba(47,111,237,.08)';ctx.fillRect(c.x,c.y,c.w,c.h);}
+          ctx.lineWidth=1/scale;ctx.strokeStyle='#76a5ff';for(const c of cells)ctx.strokeRect(c.x,c.y,c.w,c.h);
+        }
+        status.textContent=layout?`${sources.length} 张图片 · ${width} × ${height} px`:`${cols*rows} 块 · 原图 ${source.width} × ${source.height} px`;this.gridPreviewReady=true;apply.disabled=!!this.editingBusy;
+      }catch(error){if(token===this.gridPreviewToken){status.textContent=error.message;apply.disabled=true;}}
+      finally{for(const {source} of sources)source.dispose();}
+    },
+    async stitchImageGrid(cols,rows,gap=0){
+      const targets=this.getImageGridGroup();if(!targets.length)return;
+      return this.runEditingTask(targets,async()=>{
+        const sources=await this.loadGridSources(targets);
+        try{const layout=this.gridStitchLayout(sources,cols,rows,gap),canvas=makeCanvas(layout.width,layout.height);this.drawGridStitch(canvas.getContext('2d'),layout);const assetId=await this.store.putAsset(await toBlob(canvas),{name:'宫格拼图.png'}),bounds=this.getElementsBBox(targets),displayScale=Math.min(1,bounds.w/layout.width);
+          return {items:[{id:id(),type:'image',assetId,x:bounds.x+bounds.w+24,y:bounds.y,w:layout.width*displayScale,h:layout.height*displayScale}],message:'已生成宫格拼图，原群组保留；支持撤销。'};
+        }finally{for(const {source} of sources)source.dispose();}
+      });
+    },
+
+    async splitImageGrid(cols,rows,gap=0){
       const selected=this.getSelectedElements(),target=selected.length===1&&selected[0].type==='image'?selected[0]:null;if(!target)return;
       return this.runEditingTask([target],async()=>{
         const snapshot=clone(target),record=await this.store.getAsset(snapshot.assetId);if(!record?.blob)throw new Error('图片资源不存在。');
         const source=await this.loadCropDrawable(record.blob);
         try{
-          const cells=V.gridCells(source.width,source.height,cols,rows),items=[];
+          const cells=V.gridCells(source.width,source.height,cols,rows,gap),items=[];
           for(const cell of cells){const canvas=makeCanvas(cell.w,cell.h);canvas.getContext('2d').drawImage(source.drawable,cell.x,cell.y,cell.w,cell.h,0,0,cell.w,cell.h);const assetId=await this.store.putAsset(await toBlob(canvas),{croppedFrom:snapshot.assetId,name:`切片-${items.length+1}.png`});const el={...snapshot,id:id(),assetId,x:snapshot.x+cell.x/source.width*snapshot.w,y:snapshot.y+cell.y/source.height*snapshot.h,w:cell.w/source.width*snapshot.w,h:cell.h/source.height*snapshot.h};delete el.groupId;items.push(el);}
           return {items,remove:[target],message:`已切成 ${cols} × ${rows}，取消选择后可逐块移动。`};
         }finally{source.dispose();}

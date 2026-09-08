@@ -51,12 +51,15 @@
     }
     return {x:Math.min(a.x,a.x+dx),y:Math.min(a.y,a.y+dy),w:Math.abs(dx),h:Math.abs(dy)};
   };
-  const gridCells = (width,height,cols,rows) => {
+  const gridCells = (width,height,cols,rows,gap=0) => {
     if(!Number.isInteger(cols)||!Number.isInteger(rows)||cols<1||rows<1||cols*rows>100||cols>width||rows>height)throw new Error('请输入正整数列数和行数，总块数最多 100，且不能超过图片像素尺寸。');
+    if(!Number.isInteger(gap))throw new Error('间距需为整数像素，负数表示重叠。');
     const cells=[];
     for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
-      const x=Math.round(col*width/cols),y=Math.round(row*height/rows);
-      cells.push({x,y,w:Math.round((col+1)*width/cols)-x,h:Math.round((row+1)*height/rows)-y});
+      const x=Math.max(0,Math.min(width,Math.round(col*width/cols)+(col?Math.ceil(gap/2):0))),y=Math.max(0,Math.min(height,Math.round(row*height/rows)+(row?Math.ceil(gap/2):0)));
+      const right=Math.max(0,Math.min(width,Math.round((col+1)*width/cols)-(col<cols-1?Math.floor(gap/2):0))),bottom=Math.max(0,Math.min(height,Math.round((row+1)*height/rows)-(row<rows-1?Math.floor(gap/2):0)));
+      if(right<=x||bottom<=y)throw new Error('间距过大，每块切片需至少保留 1 像素。');
+      cells.push({x,y,w:right-x,h:bottom-y});
     }
     return cells;
   };

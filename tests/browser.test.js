@@ -65,13 +65,126 @@ test('浏览器：镜像图片宫格切割保留原像素与世界坐标',async(
   assert.equal(result.count,6);assert.deepEqual(result.bounds,result.original);assert.equal(result.undoCount,1);assert.equal(result.dimensions.reduce((sum,d)=>sum+d.w*d.h,0),101*73);
 });
 
-test('浏览器：旋转图片的鼠标裁剪使用本地坐标及固定比例',async()=>{
+test('浏览器：宫格预览与自定义间距在确认前不切割',async()=>{
+  await page.evaluate(async()=>{resetBoard();await testImage(64,48);});
+  await page.locator('[data-edit="grid"]').click();
+  await page.locator('#grid-popover').waitFor({state:'visible'});
+  assert.equal(await page.locator('#grid-preview').evaluate(el=>el.tagName),'CANVAS');
+  assert.deepEqual(await page.locator('#grid-custom input').evaluateAll(inputs=>inputs.map(input=>input.name)),['cols','rows','gap']);
+  await page.waitForFunction(()=>document.querySelector('#grid-apply')&&!document.querySelector('#grid-apply').disabled);
+  const before=await page.evaluate(()=>({count:quickdraw.elements.length,preview:document.querySelector('#grid-preview').toDataURL()}));
+  await page.locator('#grid-popover [data-grid="2×2"]').click();
+  await page.locator('#grid-custom [name="gap"]').fill('4');
+  await page.waitForFunction(old=>document.querySelector('#grid-preview').toDataURL()!==old,before.preview);
+  const previewState=await page.evaluate(()=>({count:quickdraw.elements.length,cols:document.querySelector('#grid-custom [name="cols"]').value,rows:document.querySelector('#grid-custom [name="rows"]').value,gap:document.querySelector('#grid-custom [name="gap"]').value}));
+  assert.equal(previewState.count,before.count);assert.equal(previewState.cols,'2');assert.equal(previewState.rows,'2');assert.equal(previewState.gap,'4');
+  await page.waitForFunction(()=>!document.querySelector('#grid-apply').disabled);
+  await page.locator('#grid-apply').click();
+  await page.waitForFunction(()=>quickdraw.elements.filter(el=>el.type==='image').length===4);
+  const pieces=await page.evaluate(()=>quickdraw.elements.filter(el=>el.type==='image').map(el=>({x:el.x,y:el.y,w:el.w,h:el.h})));
+  assert.ok(pieces[1].x-(pieces[0].x+pieces[0].w)>=3.9);assert.ok(pieces[2].y-(pieces[0].y+pieces[0].h)>=3.9);
+});
+
+test('浏览器：宫格拼图入口只对完整的纯图片群组显示',async()=>{
+  const result=await page.evaluate(async()=>{
+    const b=resetBoard(),images=[await testImage(24,18),await testImage(24,18)];
+    for(const image of images)image.groupId='grid-group';
+    b.setSelection(images,false);b.updateEditingUI();
+    const valid={group:b.getImageGridGroup().map(el=>el.id),visible:!document.querySelector('[data-edit="stitch-grid"]').hidden};
+    const shape={id:QDCore.newId('e'),type:'rect',x:300,y:300,w:24,h:18,fill:'solid',stroke:'none',color:'#000',groupId:'grid-group'};
+    b.elements.push(shape);b.setSelection([...images,shape],false);b.updateEditingUI();
+    return{valid,invalid:{group:b.getImageGridGroup().length,visible:!document.querySelector('[data-edit="stitch-grid"]').hidden}};
+  });
+  assert.equal(result.valid.group.length,2);assert.equal(result.valid.visible,true);assert.equal(result.invalid.group,0);assert.equal(result.invalid.visible,false);
+});
+
+test('浏览器：宫格拼图保留原群组并支持撤销',async()=>{
+  const result=await page.evaluate(async()=>{
+    const b=resetBoard(),images=[];
+    for(let i=0;i<4;i++){const image=await testImage(20,16);image.x=300+(i%2)*20;image.y=300+Math.floor(i/2)*16;image.groupId='grid-group';images.push(image);}
+    b.setSelection(images,false);b.commit();const originalIds=images.map(el=>el.id),originalGroup=images.map(el=>el.groupId);await b.stitchImageGrid(2,2,2);
+    const stitched=b.elements.find(el=>!originalIds.includes(el.id)),beforeUndo={count:b.elements.length,stitched:stitched?.type==='image',original:originalIds.every(id=>b.elements.some(el=>el.id===id&&el.groupId==='grid-group')),right:stitched?.x>=Math.max(...images.map(el=>el.x+el.w)),size:stitched&&await assetPixel(stitched,0,0)};
+    b.undo();return{beforeUndo,afterUndo:{count:b.elements.length,ids:b.elements.map(el=>el.id),groups:images.map(el=>el.groupId)},originalIds,originalGroup};
+  });
+  assert.equal(result.beforeUndo.count,5);assert.equal(result.beforeUndo.stitched,true);assert.equal(result.beforeUndo.original,true);assert.equal(result.beforeUndo.right,true);assert.deepEqual([result.beforeUndo.size.w,result.beforeUndo.size.h],[42,34]);
+  assert.equal(result.afterUndo.count,4);assert.deepEqual(result.afterUndo.ids,result.originalIds);assert.deepEqual(result.afterUndo.groups,result.originalGroup);
+});
+
+test('浏览器：拼图正间距透明，负间距由后一张图片覆盖',async()=>{
+  for(const gap of [4,-4]){
+    const result=await page.evaluate(async gap=>{
+      const b=resetBoard(),left=await testImage(20,16),right=await testImage(20,16);right.x=left.x+30;left.groupId=right.groupId='pair';b.setSelection([left,right],false);b.commit();await b.stitchImageGrid(2,1,gap);
+      const output=b.selectedElement;return await assetPixel(output,gap>0?21:18,8);
+    },gap);
+    assert.equal(result.w,40+gap);assert.deepEqual(result.pixel,gap>0?[0,0,0,0]:[255,0,0,255]);
+  }
+});
+
+test('浏览器：镜像切图预览跟随画布方向',async()=>{
+  const result=await page.evaluate(async()=>{
+    const b=resetBoard();await testImage(100,80);b.flipSelection('x');b.openGridEditor('split');await b.refreshGridPreview();const canvas=document.querySelector('#grid-preview');return Array.from(canvas.getContext('2d').getImageData(10,10,1,1).data);
+  });
+  assert.ok(result[2]>result[0]);
+});
+
+test('浏览器：旋转图片的鼠标裁剪使用本地坐标，双击确认并保持固定比例',async()=>{
   await page.evaluate(async()=>{const b=resetBoard();await testImage();b.rotateSelection(Math.PI/2);b.beginRatioCrop(1);});
   const pts=await page.evaluate(()=>{const el=quickdraw.selectedElement;return [{x:310,y:310},{x:350,y:350}].map(p=>QDVector.point(el.transform,p));});
   await page.mouse.move(pts[0].x,pts[0].y);await page.mouse.down();await page.mouse.move(pts[1].x,pts[1].y,{steps:5});await page.mouse.up();
+  const pending=await page.evaluate(()=>({active:!!quickdraw.cropTarget,rect:quickdraw.cropRect,w:quickdraw.selectedElement.w,h:quickdraw.selectedElement.h}));
+  assert.equal(pending.active,true);assert.equal(pending.rect.w,40);assert.equal(pending.rect.h,40);assert.equal(pending.w,100);assert.equal(pending.h,80);
+  const confirm=await page.evaluate(()=>QDVector.point(quickdraw.selectedElement.transform,{x:330,y:330}));
+  await page.mouse.dblclick(confirm.x,confirm.y);
   await page.waitForFunction(()=>!quickdraw.cropTarget);
   const result=await page.evaluate(async()=>{const el=quickdraw.selectedElement;return{w:el.w,h:el.h,transform:el.transform,...await assetPixel(el,0,0)};});
   assert.equal(result.w,40);assert.equal(result.h,40);assert.equal(result.transform[1],1);assert.deepEqual(result.pixel,[255,0,0,255]);
+});
+
+test('浏览器：裁剪框内部可移动，八个控制点可缩放，比例裁剪保持比例且 Esc 取消',async()=>{
+  const handles=[
+    ['nw',{x:320,y:315},{x:315,y:310}],['n',{x:340,y:315},{x:340,y:310}],['ne',{x:360,y:315},{x:365,y:310}],['e',{x:360,y:330},{x:365,y:330}],
+    ['se',{x:360,y:345},{x:365,y:350}],['s',{x:340,y:345},{x:340,y:350}],['sw',{x:320,y:345},{x:315,y:350}],['w',{x:320,y:330},{x:315,y:330}]
+  ];
+  for(const [name,start,end] of handles){
+    const state=await page.evaluate(async()=>{const b=resetBoard();const el=await testImage(100,80);b.beginRatioCrop(0);return{assetId:el.assetId,original:{x:el.x,y:el.y,w:el.w,h:el.h}};});
+    const drag=async(a,b)=>{await page.mouse.move(a.x,a.y);await page.mouse.down();await page.mouse.move(b.x,b.y,{steps:3});await page.mouse.up();};
+    await drag({x:320,y:315},{x:360,y:345});
+    const before=await page.evaluate(()=>({...quickdraw.cropRect}));
+    await drag(start,end);
+    const after=await page.evaluate(()=>({active:!!quickdraw.cropTarget,rect:{...quickdraw.cropRect}}));
+    assert.equal(after.active,true,name);assert.ok(after.rect.w>0&&after.rect.h>0,name);assert.ok(after.rect.w!==before.w||after.rect.h!==before.h,name);
+    await page.keyboard.press('Escape');
+    const cancelled=await page.evaluate(original=>{const el=quickdraw.selectedElement;return{active:!!quickdraw.cropTarget,rect:quickdraw.cropRect,assetId:el.assetId,box:{x:el.x,y:el.y,w:el.w,h:el.h},history:quickdraw.history.length};},state.original);
+    assert.equal(cancelled.active,false,name);assert.equal(cancelled.rect,null,name);assert.equal(cancelled.assetId,state.assetId,name);assert.deepEqual(cancelled.box,state.original,name);
+  }
+
+  const ratio=await page.evaluate(async()=>{const b=resetBoard();await testImage(100,80);b.beginRatioCrop(1);return true;});
+  assert.equal(ratio,true);
+  const drag=async(a,b)=>{await page.mouse.move(a.x,a.y);await page.mouse.down();await page.mouse.move(b.x,b.y,{steps:4});await page.mouse.up();};
+  await drag({x:320,y:315},{x:350,y:345});
+  await drag({x:350,y:345},{x:370,y:365});
+  const resized=await page.evaluate(()=>{const rect={...quickdraw.cropRect},bounds=quickdraw.getRawElementBBox(quickdraw.cropTarget);return{rect,bounds};});
+  assert.ok(resized.rect.w>30);assert.ok(Math.abs(resized.rect.w/resized.rect.h-1)<.001);
+  assert.ok(resized.rect.x>=resized.bounds.x&&resized.rect.y>=resized.bounds.y);
+  assert.ok(resized.rect.x+resized.rect.w<=resized.bounds.x+resized.bounds.w&&resized.rect.y+resized.rect.h<=resized.bounds.y+resized.bounds.h);
+  const center={x:resized.rect.x+resized.rect.w/2,y:resized.rect.y+resized.rect.h/2};
+  await drag(center,{x:center.x+5,y:center.y+5});
+  const moved=await page.evaluate(()=>({...quickdraw.cropRect}));
+  assert.deepEqual(moved,{...resized.rect,x:resized.rect.x+5,y:resized.rect.y+5});
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(()=>quickdraw.cropTarget),null);
+});
+
+test('浏览器：图层快捷键支持后移、前移、置底、置顶并可撤销且保持多选顺序',async()=>{
+  const setup=()=>page.evaluate(()=>{
+    const b=resetBoard(),items=['a','b','c','d','e'].map((id,i)=>({id,type:'rect',x:300+i*30,y:300,w:20,h:20,fill:'solid',stroke:'none',color:'#111'}));
+    b.elements=items;b.setSelection([items[1],items[3]],false);b.commit();b.container.focus();return items.map(el=>el.id);
+  });
+  const run=async(key)=>{const original=await setup();await page.keyboard.press(key);const moved=await page.evaluate(()=>({ids:quickdraw.elements.map(el=>el.id),selected:quickdraw.getSelectedElements().map(el=>el.id)}));await page.evaluate(()=>quickdraw.undo());const undone=await page.evaluate(()=>quickdraw.elements.map(el=>el.id));return{original,moved,undone};};
+  const backward=await run('Control+[');assert.deepEqual(backward.moved.ids,['b','a','d','c','e']);assert.deepEqual(backward.moved.selected,['b','d']);assert.deepEqual(backward.undone,backward.original);
+  const forward=await run('Control+]');assert.deepEqual(forward.moved.ids,['a','c','b','e','d']);assert.deepEqual(forward.moved.selected,['b','d']);assert.deepEqual(forward.undone,forward.original);
+  const bottom=await run('Control+Shift+[');assert.deepEqual(bottom.moved.ids,['b','d','a','c','e']);assert.deepEqual(bottom.moved.selected,['b','d']);assert.deepEqual(bottom.undone,bottom.original);
+  const top=await run('Control+Shift+]');assert.deepEqual(top.moved.ids,['a','c','e','b','d']);assert.deepEqual(top.moved.selected,['b','d']);assert.deepEqual(top.undone,top.original);
 });
 
 for(const operation of ['intersect','subtract','split-mask'])test(`浏览器：${operation} 按形状填充遮罩并能撤销`,async()=>{

@@ -43,7 +43,7 @@ If it saves you a few tool switches, a GitHub **Star** is the simplest way to fi
 | Where you work | Chrome side panel, beside the current page | Usually a separate site or app | Usually leaves the page |
 | Page capture | Right-click text, images, or the visible tab | Mostly copy and paste | Mostly text excerpts |
 | Flowcharts | Mermaid import becomes editable nodes and edges | Depends; often a static image | Usually none |
-| Image tools | Crop, mask, grid-slice, transparent-outline tracing | Rare, or export-then-edit | Usually none |
+| Image tools | Crop, mask, grid-slice, grid collage, transparent-outline tracing | Rare, or export-then-edit | Usually none |
 | Default storage | Extension storage + IndexedDB on this profile | Often a cloud account | Depends |
 | How it runs | Load unpacked source, no build | Usually SaaS or a large frontend | Usually SaaS |
 
@@ -113,7 +113,7 @@ The working path is four steps:
 | Collect reading and references | In-place text, Markdown notes, image import, right-click page capture |
 | Structure a process | Mind maps, editable Mermaid flowcharts, anchored connectors, branch fold and layout |
 | Tighten layout | Multi-select, group, duplicate, z-order, align, distribute, snap to grid |
-| Edit images | Free and ratio crop, rotate, flip, grid-slice, image-and-shape masking |
+| Edit images | Free and ratio crop, rotate, flip, grid-slice, grid collage, image-and-shape masking |
 | Make vector shapes | Pen/Bezier paths, node editing, transparent-image contour tracing, independent fill and stroke |
 | Continue with AI | ChatGPT / Doubao mind maps and image edits, Grok image edits, online background removal |
 | Keep and take results | Multiple boards, local autosave, version history, board search, PNG / SVG / project / asset export |
@@ -130,8 +130,9 @@ Select a transparent image and run contour tracing to create a separate vector s
 
 The board also supports:
 
-- **Ratio crop:** click crop for free crop; double-click to pick `1:1`, `9:16`, `16:9`, `3:4`, `4:3`, or a custom ratio.
-- **Grid slice:** split into independent images by rows and columns, up to 100 pieces, each movable and exportable.
+- **Adjustable crop:** click the crop button for free crop; double-click the button to pick `1:1`, `9:16`, `16:9`, `3:4`, `4:3`, or a custom ratio. Drag to draw a crop box, then release to adjust it: drag inside to move it or use any of the eight handles to resize. Double-click inside the box to apply; `Esc` cancels. Fixed ratios, rotation, and flips are preserved; cropping can be undone.
+- **Grid slice:** select one image and use the left toolbar to preview rows, columns, and spacing before confirming. Presets include `1×2`, `2×1`, `2×2`, `2×3`, `3×2`, and `3×3` (columns × rows); custom grids support up to 100 pieces. Spacing uses source-image pixels: `0` is seamless, positive values skip strips between cells, and negative values include overlapping content in adjacent slices. Slices stay within the source image and retain its placement, rotation, and flips. Each piece can be moved or exported; undo restores the source.
+- **Grid collage:** group at least two images with `Ctrl / ⌘ + G`, then select the complete group. The left-toolbar collage action appears only when every group member is an image. Preview the grid and spacing, then generate a new PNG beside the original group. Images follow their canvas order, top to bottom and left to right, and fit fully inside equal-sized cells without stretching. Positive spacing leaves transparent gaps; negative spacing overlaps cells, with later images drawn over earlier ones. The original group stays, and generation can be undone. Use enough cells for all images (up to 100); unused cells remain transparent. Output is limited to 12 million pixels and 16,384 pixels per side.
 - **Image mask:** select one image plus one shape/stroke, then intersect, subtract, or split. The result is a transparent PNG.
 - **Local repair:** OpenCV Telea inpainting on a boxed region. The image is not uploaded.
 - **Online background removal:** Koukoutu generates a transparent background, one image at a time for multi-select. This uploads the selected image and submits the service’s interaction checksum.
@@ -182,6 +183,9 @@ Give the board focus first. While editing text, some keys behave as typing.
 | Undo / redo | `Ctrl / ⌘ + Z` / `Ctrl / ⌘ + Shift + Z` |
 | Duplicate selection | `Ctrl / ⌘ + D`, or `Alt + drag` |
 | Copy selection as transparent PNG | `Ctrl / ⌘ + C` |
+| Send backward / bring forward one layer | `Ctrl / ⌘ + [` / `Ctrl / ⌘ + ]` |
+| Send to back / bring to front | `Ctrl / ⌘ + Shift + [` / `Ctrl / ⌘ + Shift + ]` |
+| Confirm / cancel crop | Double-click inside the crop box / `Esc` |
 | Group / ungroup | `Ctrl / ⌘ + G` / `Ctrl / ⌘ + Shift + G` |
 | Search board text | `Ctrl / ⌘ + F` |
 | Delete selection or connector | `Delete` / `Backspace` |

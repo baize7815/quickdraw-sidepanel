@@ -163,3 +163,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{
 .canvas-container.tool-pen{cursor:crosshair}
 .selection-toolbar[hidden],.selection-toolbar [hidden],.image-extra-actions[hidden],.image-options[hidden]{display:none!important}
 @media(max-width:600px){.selection-toolbar{top:74px;max-width:calc(100vw - 28px)}.image-options{left:58px;width:min(254px,calc(100vw - 108px))}.actionbar{max-height:calc(100vh - 180px);overflow-y:auto}}
+
+/* Shared image grid preview and settings, including narrow side panels. */
+.image-extra-actions [hidden]{display:none!important}
+.image-options.grid-editor{left:50%;top:50%;transform:translate(-50%,-50%);width:min(1120px,calc(100vw - 32px));height:min(720px,calc(100dvh - 100px));display:grid;grid-template-columns:minmax(0,1fr) 240px;padding:0;overflow:hidden;z-index:60}
+.grid-preview-stage{display:flex;align-items:center;justify-content:center;min-width:0;min-height:0;padding:24px;background-color:#191d23;background-image:conic-gradient(#222831 25%,transparent 0 50%,#222831 0 75%,transparent 0);background-size:20px 20px}
+#grid-preview{display:block;max-width:100%;max-height:100%;object-fit:contain}
+.grid-settings{padding:18px;overflow:auto;min-height:0}
+.grid-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.grid-heading strong{margin:0}.grid-heading button{width:32px;font-size:20px}
+.grid-editor .preset-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-editor [data-grid].active{background:#2f6fed25;border-color:#2f6fed;color:var(--sel,#2f6fed)}
+.grid-editor #grid-custom{display:flex;flex-direction:column;align-items:stretch;gap:12px}.grid-editor #grid-custom label{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:10px;flex:none;font-size:12px}.grid-editor input{width:92px;padding:8px}.grid-editor p{margin:0}.grid-editor #grid-status{opacity:1;min-height:2.8em}.grid-editor button:disabled{opacity:.45;cursor:default}
+@media(max-width:640px){.image-options.grid-editor{grid-template-columns:1fr;grid-template-rows:minmax(120px,1fr) auto;height:calc(100dvh - 80px);width:calc(100vw - 20px)}.grid-preview-stage{padding:12px}.grid-settings{padding:12px;max-height:48dvh}.grid-editor #grid-custom{gap:8px}.grid-editor .primary-button{margin-top:0}}
