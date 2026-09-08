@@ -208,7 +208,9 @@
 
     async finishActive(task, status, error, options = {}) {
       await this.stopListener(task);
-      await this.cleanupOwnedTab(task);
+      const preservePage = status === 'needs-attention' && task.provider === 'gpt' && task.kind === 'image-edit';
+      if (preservePage) await this.providers[task.provider]?.detach?.(task);
+      else await this.cleanupOwnedTab(task);
       const finished = await this.update(task, { status, error: AI.limitText(error || '', 1_000), deadlineAt: null, stageDeadlineAt: 0, ...(options.patch || {}) });
       if (options.cleanupInput !== false) await this.cleanupInput(task);
       this.release(finished);

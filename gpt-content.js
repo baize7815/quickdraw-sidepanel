@@ -251,7 +251,7 @@
       for (const element of document.querySelectorAll(selector)) {
         if (!visible(element) || seen.has(element)) continue;
         const text = textOf(element);
-        if (text) { seen.add(element); result.push({ element, text, fingerprint: hash(text) }); }
+        if (text || element.querySelector?.('img')) { seen.add(element); result.push({ element, text, fingerprint: hash(text || element.innerHTML || '') }); }
       }
     }
     return result;
@@ -380,18 +380,41 @@
     }
   }
 
-  function findAttachmentInput() { return document.querySelector('input[type="file"]'); }
+  function attachmentRoot() {
+    const composer = findInput();
+    const root = composer?.closest?.('form,[data-type="unified-composer"],[class*="composer" i]');
+    // Attachment cards can be siblings of the editor form.
+    return root?.parentElement || root || composer?.parentElement?.parentElement || null;
+  }
+
+  function findAttachmentInput() {
+    const eligible = input => !input.disabled && (!input.accept || /image\/|\.(png|jpe?g|webp|gif|avif|heic)\b/i.test(input.accept));
+    const local = [...(attachmentRoot()?.querySelectorAll('input[type="file"]') || [])].filter(eligible);
+    if (local.length === 1) return local[0];
+    const candidates = local.length ? local : [...document.querySelectorAll('input[type="file"]')].filter(eligible);
+    const images = candidates.filter(input => /image\//i.test(input.accept || ''));
+    // Hidden file inputs are normal; ambiguous inputs must not receive user files.
+    return images.length === 1 ? images[0] : candidates.length === 1 ? candidates[0] : null;
+  }
 
   function attachmentMarkers() {
-    const selectors = '[data-testid*="attachment" i],[aria-label*="attachment" i],[class*="attachment" i],[data-testid*="upload" i],[class*="upload" i]';
-    return [...document.querySelectorAll(selectors)].filter(visible);
+    const selectors = '[data-testid*="attachment" i],[aria-label*="attachment" i],[class*="attachment" i],[data-testid*="upload" i],[class*="upload" i],[aria-busy="true"],[role="progressbar"]';
+    const markers = [...document.querySelectorAll(selectors)].filter(element => visible(element) && !outsideAttachmentArea(element));
+    const chips = [...document.querySelectorAll('span,div,button')].filter(element => visible(element) && /^quickdraw-source-\d+\.png$/.test(textOf(element)) && !element.closest?.('[data-message-author-role],[data-testid*="conversation-turn"]'));
+    return [...new Set([...markers, ...chips.filter(element => !chips.some(other => other !== element && element.contains?.(other)))])];
+  }
+
+  function outsideAttachmentArea(element) {
+    return !!element.closest?.('[data-message-author-role],[data-testid*="conversation-turn"],nav,aside,header');
   }
 
   function attachmentPreviewImages(input) {
-    const root = input?.closest?.('form') || input?.parentElement?.parentElement || document;
-    return [...(root?.querySelectorAll?.('img') || [])].filter(image => {
+    // ChatGPT can render the attachment tray outside the editor/form subtree.
+    // Compare page-level candidates against the pre-paste baseline, excluding
+    // conversation turns and navigation rather than guessing the editor depth.
+    return [...document.querySelectorAll('img')].filter(image => {
       const marker = `${image.alt || ''} ${image.getAttribute?.('aria-label') || ''} ${image.className || ''}`.toLowerCase();
-      return visible(image) && !/avatar|profile|logo|icon|emoji/.test(marker);
+      return visible(image) && !outsideAttachmentArea(image) && !/avatar|profile|logo|icon|emoji/.test(marker);
     });
   }
 
@@ -400,7 +423,7 @@
   }
 
   function isLoadedAttachmentPreview(image) {
-    return !!image && image.complete !== false && Number(image.naturalWidth || 0) >= 64 && Number(image.naturalHeight || 0) >= 64 &&
+    return !!image && image.complete !== false && Number(image.naturalWidth || 0) > 0 && Number(image.naturalHeight || 0) > 0 &&
       !/^data:image\/svg|^about:blank/i.test(String(image.currentSrc || image.src || ''));
   }
 
@@ -408,8 +431,8 @@
     return (previews || []).find(image => !baselinePreviews?.has(image) || baselinePreviews.get(image) !== attachmentPreviewState(image)) || null;
   }
 
-  function attachmentReadyEvidence(marker, preview, sendReady) {
-    if (!sendReady || (marker && (attachmentIsBusy(marker) || attachmentIsError(marker)))) return false;
+  function attachmentReadyEvidence(marker, preview) {
+    if (marker && (attachmentIsBusy(marker) || attachmentIsError(marker))) return false;
     return !!((marker && attachmentIsComplete(marker)) || isLoadedAttachmentPreview(preview));
   }
 
@@ -453,7 +476,7 @@
     if (progress != null && progress < 100) return false;
     if (attachmentIsBusy(element) && progress !== 100) return false;
     const state = `${element.getAttribute?.('data-state') || ''} ${element.getAttribute?.('aria-label') || ''} ${textOf(element)}`.toLowerCase();
-    return progress === 100 || /uploaded|complete|completed|ready|已上传|完成|就绪/.test(state);
+    return progress === 100 || /uploaded|complete|completed|ready|已上传|完成|就绪/.test(state) || /^quickdraw-source-\d+\.png$/.test(textOf(element));
   }
 
   function uploadHasStalled(lastProgressAt, now = Date.now()) {
@@ -485,11 +508,12 @@
       const previews = attachmentPreviewImages(input);
       const freshPreviews = previews.filter(image => !baselinePreviews.has(image) || baselinePreviews.get(image) !== attachmentPreviewState(image));
       const freshMarkers = markers.filter(element => !baselineMarkers.has(element) || baselineMarkers.get(element) !== attachmentMarkerState(element));
-      const sendReady = !!findSendButton();
       const completePreviews = freshPreviews.filter(isLoadedAttachmentPreview).length;
-      const completeMarkers = freshMarkers.filter(attachmentIsComplete).length;
-      const readyCount = Math.max(completePreviews, completeMarkers, attachmentReadyEvidence(targetMarker, freshPreviews[0], sendReady) ? 1 : 0);
-      if (sendReady && readyCount >= expectedCount && !freshMarkers.some(attachmentIsBusy) && !freshMarkers.some(attachmentIsError)) {
+      // Nested wrappers for one attachment must not count as several files.
+      const completeMarkers = freshMarkers.filter(attachmentIsComplete).filter(marker =>
+        !freshMarkers.some(other => other !== marker && attachmentIsComplete(other) && marker.contains?.(other))).length;
+      const readyCount = Math.max(completePreviews, completeMarkers, attachmentReadyEvidence(targetMarker, freshPreviews[0]) ? 1 : 0);
+      if (readyCount >= expectedCount && !freshMarkers.some(attachmentIsBusy) && !freshMarkers.some(attachmentIsError)) {
         if (!readySince) readySince = Date.now();
         if (Date.now() - readySince >= 800) return true;
       } else readySince = 0;
@@ -505,9 +529,31 @@
     emitPhase(taskId, 'uploading', { progress: 0 });
     const baselineMarkers = new Map(attachmentMarkers().map(element => [element, attachmentMarkerState(element)]));
     const baselinePreviews = new Map(attachmentPreviewImages(null).map(image => [image, attachmentPreviewState(image)]));
+    if (typeof DataTransfer === 'undefined') throw new Error('当前页面不支持图片传递。');
+    const transfer = new DataTransfer();
+    values.forEach((blob, index) => {
+      transfer.items.add(new File([blob], `quickdraw-source-${String(index + 1).padStart(2, '0')}.png`, { type: blob.type || 'image/png' }));
+    });
+    // Send files through the active editor's paste handler. Page-wide hidden
+    // file inputs may belong to a different tool, even if they accept images.
+    const composer = findInput();
+    if (composer && typeof ClipboardEvent !== 'undefined') {
+      composer.focus();
+      composer.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true, composed: true }));
+      const accepted = await waitUntil(() => {
+        if (!active.has(taskId)) return { cancelled: true };
+        const freshPreview = attachmentPreviewImages(null).some(image => !baselinePreviews.has(image) || baselinePreviews.get(image) !== attachmentPreviewState(image));
+        const freshMarker = attachmentMarkers().some(marker => !baselineMarkers.has(marker) || baselineMarkers.get(marker) !== attachmentMarkerState(marker));
+        return freshPreview || freshMarker;
+      }, 10_000);
+      if (!active.has(taskId)) return false;
+      if (!accepted) throw new Error('GPT 输入框未显示收到的图片，未发送需求。请确认该会话可以粘贴图片后重试。');
+      // Never repeat the upload through another route after dispatching paste.
+      return await waitForAttachment(taskId, null, baselineMarkers, baselinePreviews, values.length);
+    }
     let input = findAttachmentInput();
     if (!input) {
-      const button = [...document.querySelectorAll('button,[role="button"]')].find(element => {
+      const button = [...(attachmentRoot() || document).querySelectorAll('button,[role="button"]')].find(element => {
         const label = `${element.getAttribute?.('aria-label') || ''} ${element.getAttribute?.('title') || ''} ${element.textContent || ''}`.toLowerCase();
         return /attach|upload|image|photo|附件|上传|图片/.test(label) && visible(element);
       });
@@ -516,11 +562,6 @@
     }
     if (!input || typeof DataTransfer === 'undefined') return false;
     try {
-      const transfer = new DataTransfer();
-      values.forEach((blob, index) => {
-        const file = typeof File !== 'undefined' ? new File([blob], `quickdraw-source-${String(index + 1).padStart(2, '0')}.png`, { type: blob.type || 'image/png' }) : blob;
-        transfer.items.add(file);
-      });
       input.files = transfer.files;
       if (Number(input.files?.length || 0) !== values.length) return false;
       input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -556,10 +597,14 @@
       return;
     }
     if (generationBusy()) { dispose(taskId); emit(taskId, 'needs-attention', { error: 'GPT 正在生成其他回复，未发送新需求。' }); return; }
+    // Fill the user's text before waiting for attachments; uploading may replace
+    // the editor, so it is re-read and filled again before the final send below.
+    setInputValue(input, prompt);
     const imageValues = mode === 'image-edit' ? (Array.isArray(imageDataUrls) && imageDataUrls.length ? imageDataUrls : (imageDataUrl ? [imageDataUrl] : [])) : [];
     reservation.stage = mode === 'image-edit' && imageValues.length ? 'uploading' : 'sending';
     const imageBlobs = mode === 'image-edit' ? (await Promise.all(imageValues.map(value => dataUrlToBlob(value)))).filter(Boolean) : [];
     if (mode === 'image-edit' && imageValues.length && (imageBlobs.length !== imageValues.length || !imageBlobs.length || !(await attachImages(imageBlobs, taskId)))) { dispose(taskId); emit(taskId, 'needs-attention', { code: 'image-upload-failed', error: '图片上传失败或长时间没有可验证进展，未发送需求。' }); return; }
+    if (active.get(taskId) !== reservation) return;
     const baseline = mode === 'image-edit' ? assistantTurns() : assistantMessages();
     const baselineHashes = baseline.map(message => message.fingerprint);
     const baselineElements = new Set(baseline.map(message => message.element));
@@ -571,7 +616,9 @@
     active.set(taskId, record);
     emit(taskId, 'ready');
     emitPhase(taskId, 'sending', { progress: 0 });
-    setInputValue(input, prompt);
+    const currentInput = findInput();
+    if (!currentInput) { dispose(taskId); emit(taskId, 'needs-attention', { code: 'not-ready', error: '图片上传后未找到 GPT 输入框，未发送需求。' }); return; }
+    setInputValue(currentInput, prompt);
     const send = await waitUntil(() => findSendButton(), 3_000).then(found => found ? findSendButton() : null);
     if (active.get(taskId) !== record) return;
     if (!send) {
@@ -583,7 +630,7 @@
     const confirmedMessage = await waitUntil(() => {
       const users = userMessages();
       if (generationBusy()) record.sawBusy = true;
-      return users.find(message => message.text.includes(`任务编号：${taskId}`) && !record.baselineUserElements.has(message.element)) || null;
+      return users.find(message => !record.baselineUserElements.has(message.element) && (mode === 'image-edit' ? (prompt.trim() ? message.text.replace(/\s+/g, ' ').trim() === prompt.replace(/\s+/g, ' ').trim() : !!message.element.querySelector?.('img')) : message.text.includes(`任务编号：${taskId}`))) || null;
     }, SEND_TIMEOUT);
     if (active.get(taskId) !== record) return;
     if (!confirmedMessage) {

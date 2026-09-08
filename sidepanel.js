@@ -2179,7 +2179,8 @@
 
     syncAIModeUI(){
       const image=this.aiDialogMode==='image-edit';
-      const hasInputImages=image&&!!this.aiImageSelection?.units?.length;
+      const detailTask=!this.aiImageSelection&&this.aiCurrentTaskId?(this.aiTasks||[]).find(task=>task.taskId===this.aiCurrentTaskId)||(this.aiProgressTask?.taskId===this.aiCurrentTaskId?this.aiProgressTask:null):null;
+      const hasInputImages=image&&!!(this.aiImageSelection?.units?.length||detailTask?.inputAssets?.length||detailTask?.inputAssetIds?.length||detailTask?.inputAssetId);
       const title=$('#ai-mindmap-dialog-title'),input=$('#ai-mindmap-input'),submit=$('#ai-mindmap-submit'),hint=$('.ai-dialog-hint'),presetField=$('#ai-image-preset-field'),preset=$('#ai-image-preset');
       const provider=globalThis.QuickdrawAI?.provider(this.aiProvider||'gpt'),label=provider?.label||'GPT';
       if(title)title.textContent=image?`AI 图片编辑（${label}）`:`AI 脑图（${label}）`;

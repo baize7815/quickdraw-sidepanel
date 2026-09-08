@@ -347,6 +347,10 @@
     const users = userMessages();
     const byFingerprint = String(requestFingerprint || '') && users.findLast(message => message.fingerprint === String(requestFingerprint));
     if (byFingerprint) return byFingerprint;
+    if (requestFingerprint) {
+      const element = chooseTaskAnchor(queryAll(['body *']).filter(element => visible(element) && !isComposerElement(element) && roleOf(element) !== 'assistant' && hash(textOf(element) || element.innerHTML || '') === requestFingerprint));
+      if (element) return { element, text: textOf(element), fingerprint: requestFingerprint };
+    }
     const anchor = chooseTaskAnchor(allTaskTextElements(taskId));
     if (!anchor) return null;
     return { element: anchor, text: textOf(anchor), fingerprint: hash(textOf(anchor)) };
@@ -518,18 +522,18 @@
     return new Blob([bytes], { type: match[1].toLowerCase() });
   }
 
-  function userMessages() {
+  function userMessages(expectedText = null) {
     const result = [];
     const seen = new Set();
     for (const element of queryAll([...GROK_USER_SELECTORS, ...GROK_MESSAGE_SELECTORS])) {
       if (!visible(element) || seen.has(element) || isComposerElement(element)) continue;
       const role = roleOf(element);
       const text = textOf(element);
-      if (!text || (role !== 'user' && !/任务编号\s*[:：]/.test(text))) continue;
+      if ((!text && !element.querySelector?.('img')) || (role !== 'user' && !/任务编号\s*[:：]/.test(text) && !(expectedText && promptMatches(text, expectedText)))) continue;
       // With hashed Grok wrappers, nested selectors can report the same
       // user bubble several times. Keep the most specific task/message node.
       if (result.some(item => item.element !== element && (item.element.contains?.(element) || element.contains?.(item.element)))) continue;
-      seen.add(element); result.push({ element, text, fingerprint: hash(text) });
+      seen.add(element); result.push({ element, text, fingerprint: hash(text || element.innerHTML || '') });
     }
     for (const element of allTaskTextElements('')) {
       if (!visible(element) || seen.has(element)) continue;
@@ -537,6 +541,13 @@
       if (!text || !/任务编号\s*[:：]/.test(text)) continue;
       if (result.some(item => item.element !== element && (item.element.contains?.(element) || element.contains?.(item.element)))) continue;
       seen.add(element); result.push({ element, text, fingerprint: hash(text) });
+    }
+    if (expectedText) {
+      for (const element of queryAll(['body *'])) {
+        if (!visible(element) || seen.has(element) || isComposerElement(element) || roleOf(element) === 'assistant' || !promptMatches(textOf(element), expectedText)) continue;
+        if (result.some(item => item.element.contains?.(element) || element.contains?.(item.element))) continue;
+        seen.add(element); result.push({ element, text: textOf(element), fingerprint: hash(textOf(element)) });
+      }
     }
     return result;
   }
@@ -719,7 +730,7 @@
   }
 
   function isLoadedAttachmentPreview(image) {
-    return !!image && image.complete !== false && Number(image.naturalWidth || 0) >= 64 && Number(image.naturalHeight || 0) >= 64 &&
+    return !!image && image.complete !== false && Number(image.naturalWidth || 0) > 0 && Number(image.naturalHeight || 0) > 0 &&
       !/^data:image\/svg|^about:blank/i.test(String(image.currentSrc || image.src || ''));
   }
 
@@ -809,13 +820,13 @@
       const freshMarkers = markers.filter(element => !baselineMarkers.has(element) || baselineMarkers.get(element) !== attachmentMarkerState(element));
       const sendReady = !!findSendButton();
       const completePreviews = freshPreviews.filter(isLoadedAttachmentPreview).length;
-      const completeMarkers = freshMarkers.filter(attachmentIsComplete).length;
+      const completeMarkers = freshMarkers.filter(attachmentIsComplete).filter(marker => !freshMarkers.some(other => other !== marker && attachmentIsComplete(other) && marker.contains?.(other))).length;
       const busyMarkers = freshMarkers.filter(attachmentIsBusy);
       const errorMarkers = freshMarkers.filter(attachmentIsError);
       const readyCount = Math.max(completePreviews, completeMarkers, expectedCount === 1 && attachmentReadyEvidence(targetMarker, freshPreviews[0], sendReady) ? 1 : 0);
       const inputFileCount = Number(currentInput?.files?.length || 0);
       lastState = { expectedCount, readyCount, previewCount: freshPreviews.length, markerCount: freshMarkers.length, inputFileCount, busy: busyMarkers.length > 0, error: errorMarkers.length > 0 };
-      if (sendReady && readyCount >= expectedCount && !busyMarkers.length && !errorMarkers.length) {
+      if (readyCount >= expectedCount && !busyMarkers.length && !errorMarkers.length) {
         if (!readySince) readySince = Date.now();
         if (Date.now() - readySince >= 800) return options.details ? { ok: true, ...lastState } : true;
         incompleteSince = 0;
@@ -924,7 +935,7 @@
     const baseline = mode === 'image-edit' ? assistantTurns() : assistantMessages();
     const baselineHashes = baseline.map(message => message.fingerprint);
     const baselineElements = new Set(baseline.map(message => message.element));
-    const baselineUsers = userMessages();
+    const baselineUsers = userMessages(prompt);
     const baselineUserElements = new Set(baselineUsers.map(message => message.element));
     const baselineUserHashes = new Set(baselineUsers.map(message => message.fingerprint));
     const baselineTurnFingerprints = new Map(baseline.map(message => [message.element, message.fingerprint]));
@@ -950,8 +961,7 @@
     send.click();
     const confirmedMessage = await waitUntil(() => {
       if (generationBusy()) record.sawBusy = true;
-      const message = taskRequest(taskId);
-      return message && !record.baselineUserElements.has(message.element) ? message : null;
+      return userMessages(prompt).find(message => !record.baselineUserElements.has(message.element) && (prompt.trim() ? promptMatches(message.text, prompt) : !!message.element.querySelector?.('img'))) || null;
     }, SEND_TIMEOUT);
     if (active.get(taskId) !== record) return;
     if (!confirmedMessage) {

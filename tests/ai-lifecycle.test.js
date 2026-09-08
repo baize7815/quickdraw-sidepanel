@@ -214,12 +214,12 @@ test('附件必须有明确完成信号，文件名或刚出现的非 busy chip 
   assert.equal(Content.attachmentIsComplete(marker('failed', '上传失败')), false);
 });
 
-test('本次新预览解码完成且发送可用可作为就绪证据，processing 与旧预览不可满足', () => {
+test('本次新预览解码完成即可作为就绪证据，processing 与旧预览不可满足', () => {
   const preview={complete:true,naturalWidth:256,naturalHeight:256,currentSrc:'blob:https://chatgpt.com/new',getClientRects:()=>[{}],getAttribute:()=>'',className:''};
   const processing={textContent:'处理中',className:'attachment',getAttribute:name=>name==='data-state'?'processing':'',querySelector:()=>null};
   assert.equal(Content.attachmentReadyEvidence(null,preview,true),true);
   assert.equal(Content.attachmentReadyEvidence(processing,preview,true),false);
-  assert.equal(Content.attachmentReadyEvidence(null,preview,false),false);
+  assert.equal(Content.attachmentReadyEvidence(null,{...preview,complete:false}),false);
   const baseline=new Map([[preview,Content.attachmentPreviewState(preview)]]);
   assert.equal(Content.findFreshAttachmentPreview([preview],baseline),null);
   preview.currentSrc='blob:https://chatgpt.com/newer';
@@ -236,10 +236,11 @@ test('无显式 ready 属性时新预览稳定后会填入原提示并只点击�
   const send={disabled:false,hidden:false,offsetParent:{},getAttribute:()=>'',getClientRects:()=>[{}],click:()=>{sendCount++;users.push({innerText:promptInput.value,textContent:promptInput.value,offsetParent:{},getAttribute:()=>'',getClientRects:()=>[{}]});}};
   const form={querySelectorAll:selector=>selector==='img'&&previewVisible?[preview]:[]};
   global.HTMLTextAreaElement=Textarea;global.HTMLInputElement=class{};global.InputEvent=class{constructor(type){this.type=type;}};
-  global.DataTransfer=class{constructor(){this.files=[];this.items={add:value=>this.files.push(value)};}};global.File=undefined;
+  global.DataTransfer=class{constructor(){this.files=[];this.items={add:value=>this.files.push(value)};}};global.File=require('node:buffer').File;
   global.getComputedStyle=()=>({display:'block',visibility:'visible'});global.location={origin:'https://chatgpt.com',href:'https://chatgpt.com/'};
   global.MutationObserver=class{observe(){}disconnect(){}};
   global.document={body:{},querySelector:selector=>selector==='#prompt-textarea'?promptInput:selector==='input[type="file"]'?uploadInput:null,querySelectorAll:selector=>{
+    if(selector==='input[type="file"]')return[uploadInput];
     if(selector==='img')return previewVisible?[preview]:[];
     if(selector==='[data-message-author-role="user"]')return users;
     if(selector.includes('send-button'))return[send];
@@ -247,7 +248,7 @@ test('无显式 ready 属性时新预览稳定后会填入原提示并只点击�
   }};
   global.chrome={runtime:{id:'test-extension',sendMessage:async message=>{events.push(message);},onMessage:{addListener(){}}}};
   try{
-    await Content.start('preview-task','图片编辑助手。\n任务编号：preview-task。\n用户需求：线稿上色','image-edit','data:image/png;base64,iVBORw0KGgoAAAAA');
+    await Content.start('preview-task','线稿上色','image-edit','data:image/png;base64,iVBORw0KGgoAAAAA');
     assert.match(promptInput.value,/线稿上色/);assert.equal(sendCount,1);
     assert.equal(events.filter(event=>event.kind==='send-confirmed').length,1);
   }finally{

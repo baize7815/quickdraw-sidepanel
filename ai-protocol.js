@@ -220,11 +220,7 @@
   }
 
   function buildGPTImagePrompt(userPrompt, taskId = '') {
-    const request = limitText(userPrompt, MAX_PROMPT_LENGTH).trim();
-    return [
-      taskId ? `任务编号：${taskId}。不要在回答中复述编号。` : '',
-      request
-    ].filter(Boolean).join('\n');
+    return limitText(userPrompt, MAX_PROMPT_LENGTH).trim();
   }
 
   function buildDoubaoPrompt(userPrompt, taskId = '') {
@@ -249,13 +245,7 @@
   }
 
   function buildGrokImagePrompt(userPrompt, taskId = '') {
-    const request = limitText(userPrompt, MAX_PROMPT_LENGTH).trim();
-    return [
-      'Edit or generate one final image using all attached images as input references.',
-      'Return only the final generated image. Do not explain and do not return code or an image link.',
-      taskId ? `任务编号：${taskId}。Do not repeat this ID in the response.` : '',
-      request ? `User request: ${request}` : ''
-    ].join('\n');
+    return limitText(userPrompt, MAX_PROMPT_LENGTH).trim();
   }
 
   function normalizeInputAssets(input = {}, kind = 'mindmap') {

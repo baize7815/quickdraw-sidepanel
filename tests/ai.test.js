@@ -41,10 +41,10 @@ test('GPT 提示词强制受限 flowchart 输出并保留用户需求', () => {
   assert.match(prompt, /外卖系统/);
 });
 
-test('图片编辑需求可为空，GPT 保留任务锚点、豆包保持空文本且脑图需求继续必填', () => {
+test('图片编辑需求可为空，GPT 和豆包保持空文本且脑图需求继续必填', () => {
   const gptPrompt = AI.buildGPTImagePrompt('', 'task-image-empty');
   const doubaoPrompt = AI.buildDoubaoImagePrompt('   ', 'task-doubao-empty');
-  assert.match(gptPrompt, /任务编号：task-image-empty/);
+  assert.equal(gptPrompt, '');
   assert.equal(doubaoPrompt, '');
   assert.doesNotMatch(gptPrompt, /用户需求：/);
   assert.doesNotMatch(doubaoPrompt, /用户需求：/);

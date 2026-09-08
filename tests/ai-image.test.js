@@ -41,7 +41,7 @@ test('图片发送命令不跨 runtime 传 Blob', async () => {
   await provider.send({ kind: 'image-edit', inputAssetId: 'input', prompt: '改成红色背景', taskId: 'task-a' });
   assert.equal(typeof command.imageDataUrl, 'string');
   assert.equal('imageBlob' in command, false);
-  assert.match(command.prompt, /任务编号：task-a/);
+  assert.equal(command.prompt, '改成红色背景');
   assert.match(command.prompt, /改成红色背景/);
   assert.doesNotMatch(command.prompt, /图片编辑助手/);
 });

@@ -253,6 +253,12 @@
       this.tabId = null; this.tabMeta = null;
       return true;
     }
+    async detach(task) {
+      const saved = await this.loadTabMeta();
+      if (saved?.tabId !== task.tabId) return;
+      await chrome.storage.session.remove(this.getTabKey());
+      this.tabId = null; this.tabMeta = null;
+    }
     async open(task) {
       let tab;
       if (Number.isInteger(task?.tabId)) { try { tab = await chrome.tabs.get(task.tabId); } catch {} }

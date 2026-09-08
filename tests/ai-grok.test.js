@@ -42,7 +42,7 @@ test('Grok 使用独立站点、认证域、标签页和消息通道且仅接图
   assert.equal(provider.getContentScript(), 'grok-content.js'); assert.equal(provider.getCommandType(), 'qd-ai-grok-command');
   assert.equal(provider.isAllowedUrl('https://grok.com/c/abc'), true); assert.equal(provider.isAllowedUrl('https://evil.grok.com/'), false);
   assert.equal(provider.isAllowedAuthUrl('https://accounts.x.ai/sign-in?redirect=grok-com'), true);
-  assert.match(AI.buildGrokImagePrompt('', 'task-grok'), /任务编号：task-grok/);
+  assert.equal(AI.buildGrokImagePrompt('', 'task-grok'), '');
 });
 
 test('Grok 多图任务单次发送、结果持久化并仅在画布 receipt ACK 后关闭 owned tab', async () => {
