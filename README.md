@@ -53,6 +53,8 @@ Quickdraw is not Figma and not Photoshop. It finishes the job of “note it, dra
 
 ## Install
 
+**Latest release: [v3.7.3](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.7.3)** — grid previews and collages, adjustable crop boxes, and layer shortcuts. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.7.3/quickdraw-sidepanel-v3.7.3.zip), extract it, and load the folder containing `manifest.json` using the steps below.
+
 The public install path is unpacked source. Use desktop **Chrome 116 or newer**. Other Chromium browsers need the matching extension APIs; verify them yourself.
 
 ![Four-step unpacked install: download, open chrome://extensions, enable Developer mode, load the folder that contains manifest.json](docs/images/install.svg)
