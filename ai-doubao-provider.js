@@ -26,7 +26,8 @@
       const tab = await chrome.tabs.get(tabId);
       if (!this.isAllowedUrl(tab.url || tab.pendingUrl)) return;
       if (Number.isInteger(tab.groupId) && tab.groupId >= 0 && chrome.tabGroups?.update) {
-        await chrome.tabGroups.update(tab.groupId, { collapsed: false });
+        // Group presentation must not prevent activating the task page.
+        try { await chrome.tabGroups.update(tab.groupId, { collapsed: false }); } catch {}
       }
       await chrome.tabs.update(tabId, { active: true });
     }

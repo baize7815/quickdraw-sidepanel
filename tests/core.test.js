@@ -311,7 +311,7 @@ test('Manifest 仅固定授权抠图服务，并为其他网站保留按需权�
   const path = require('node:path');
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'));
   assert.equal(manifest.manifest_version, 3);
-  assert.equal(manifest.version, '3.7.4');
+  assert.equal(manifest.version, '3.7.5');
   assert.equal(Number(manifest.minimum_chrome_version) >= 116, true);
   assert.deepEqual(manifest.host_permissions, ['https://www.koukoutu.com/*', 'https://*.koukoutu.com/*']);
   assert.deepEqual(manifest.optional_host_permissions, ['http://*/*', 'https://*/*']);

@@ -53,7 +53,9 @@ Quickdraw 不是 Figma，也不是完整的 Photoshop。它把「看网页时顺
 
 ## 快速安装
 
-**最新发行版：[v3.7.4](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.7.4)**，包含多图导入及所选对象 PNG／SVG 下载。[下载安装包](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.7.4/quickdraw-sidepanel-v3.7.4.zip)并解压，按下方步骤加载包含 `manifest.json` 的目录。
+**最新发行版：[v3.7.5](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.7.5)**，增加手动检查更新、帮助说明、Esc 取消抠图及 Edge 兼容修正。[下载安装包](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.7.5/quickdraw-sidepanel-v3.7.5.zip)并解压，按下方步骤加载包含 `manifest.json` 的目录。
+
+更多菜单中的“检查更新”只在点击时访问 GitHub，不进行每日或后台定时检查。发现新版后点击下载，先导出项目备份，再解压覆盖原扩展目录，在扩展管理页点击“重新加载”并重开侧边栏；无需卸载扩展。
 
 当前以源码加载为主，推荐桌面版 **Chrome 116 或更新版本**。其他 Chromium 浏览器需要具备对应扩展 API，兼容性请实际验证。
 

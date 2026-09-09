@@ -1085,6 +1085,9 @@
       this.container.addEventListener('dblclick',e=>{ const p=this.eventPos(e);if(this.cropTarget){e.preventDefault();const q=this.imageLocalPoint(this.cropTarget,p),r=this.cropRect;if(r&&r.w>0&&r.h>0&&q.x>=r.x&&q.x<=r.x+r.w&&q.y>=r.y&&q.y<=r.y+r.h)this.applyImageCrop({...r});return;}const hit=this.selectAt(p);if(!hit)return;if(['text','note','mindnode'].includes(hit.type)){this.setSelection([hit]);this.editTextElement(hit);} });
 
       window.addEventListener('keydown',e=>this.onKeyDown(e));
+      window.addEventListener('keydown',e=>{
+        if(e.key==='Escape'&&this.backgroundRemovalController){e.preventDefault();e.stopImmediatePropagation();this.backgroundRemovalController.abort();}
+      },true);
       window.addEventListener('keyup',e=>{if(e.code==='Space')this.spaceDown=false;});
     }
 
@@ -1755,25 +1758,31 @@
       if(this.backgroundRemovalInProgress){this.toast('已有抠图任务正在处理。');return;}
       if(this.cropTarget){this.cropSession+=1;this.cropTarget=null;this.cropStart=null;this.cropDrag=null;this.cropRect=null;this.container.style.cursor='';this.container.classList.remove('crop-mode');}
       if(this.watermarkTarget){this.watermarkSession+=1;this.watermarkTarget=null;this.watermarkStart=null;this.watermarkRect=null;this.container.classList.remove('watermark-mode');}
+      const controller=new AbortController(),signal=controller.signal;this.backgroundRemovalController=controller;
       this.backgroundRemovalInProgress=true;this.updateHistoryUI();let succeeded=0,failed=0,lastError='';
       try{
         for(let index=0;index<targets.length;index+=1){
+          if(signal.aborted)break;
           const target=targets[index],prefix=targets.length>1?`[${index+1}/${targets.length}] `:'';
           try{
             if(!this.elements.includes(target))throw new Error('图片已从画布移除。');
             const record=await this.store.getAsset(target.assetId);if(!record?.blob)throw new Error('图片资源不存在。');
             const dimensions=await this.decodeImageBlob(record.blob);
-            const result=await this.koukoutuClient.removeBackground(record.blob,dimensions,update=>this.backgroundRemovalProgress(update,prefix));
+            signal.throwIfAborted();
+            const result=await this.koukoutuClient.removeBackground(record.blob,dimensions,update=>{if(!signal.aborted)this.backgroundRemovalProgress(update,prefix);},signal);
             const png=await this.imageBlobToPng(result);
+            signal.throwIfAborted();
             if(!this.elements.includes(target))throw new Error('图片已从画布移除。');
             const oldAssetId=target.assetId,newAssetId=await this.store.putAsset(png,{sourceUrl:target.sourceUrl||'',backgroundRemovedFrom:oldAssetId,service:'koukoutu'});
+            if(signal.aborted){await this.store.deleteAsset(newAssetId);break;}
             target.assetId=newAssetId;this.imageCache.delete(oldAssetId);this.getCachedImage(target);this.commit();this.render();succeeded+=1;
-          }catch(error){failed+=1;lastError=error?.message||'抠图失败';console.error(`Quickdraw background removal failed (${index+1}/${targets.length})`,error);this.toast(`${prefix}${lastError}，继续处理下一张…`);}
+          }catch(error){if(signal.aborted)break;failed+=1;lastError=error?.message||'抠图失败';console.error(`Quickdraw background removal failed (${index+1}/${targets.length})`,error);this.toast(`${prefix}${lastError}，继续处理下一张…`);}
         }
       }finally{
-        this.backgroundRemovalInProgress=false;this.setSelection(targets.filter(target=>this.elements.includes(target)),false);this.updateHistoryUI();this.render();
+        this.backgroundRemovalController=null;this.backgroundRemovalInProgress=false;this.setSelection(targets.filter(target=>this.elements.includes(target)),false);this.updateHistoryUI();this.render();
       }
-      if(succeeded&&failed)this.toast(`批量抠图完成：成功 ${succeeded} 张，失败 ${failed} 张。`);
+      if(signal.aborted)this.toast(`抠图已取消${succeeded?`，已完成 ${succeeded} 张，可撤销恢复`:''}。`);
+      else if(succeeded&&failed)this.toast(`批量抠图完成：成功 ${succeeded} 张，失败 ${failed} 张。`);
       else if(succeeded)this.toast(targets.length>1?`批量抠图完成，共 ${succeeded} 张。`:'背景已移除，可使用撤销恢复。');
       else this.toast(lastError||'抠图失败，请稍后重试。');
     }
@@ -2082,7 +2091,24 @@
       $('#mermaid-dialog').addEventListener('pointerdown',e=>{if(e.target===$('#mermaid-dialog'))this.closeMermaidDialog();});
       $('#mermaid-input').addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();this.closeMermaidDialog();}else if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();this.generateMermaidFromInput();}});
       $('#btn-menu').addEventListener('click',e=>{e.stopPropagation();toggle('#menu-popover');});
-      $('#btn-ai-pending').addEventListener('click',()=>this.openAIMindmapDialog(true));
+      $('#btn-help').addEventListener('click',()=>{this.closePopovers();chrome.tabs.create({url:chrome.runtime.getURL('help.html')});});
+      $('#btn-check-update').addEventListener('click',async()=>{
+        const button=$('#btn-check-update'),status=$('#update-status');
+        if(this.availableUpdate){
+          await chrome.tabs.create({url:this.availableUpdate.downloadUrl||this.availableUpdate.releaseUrl});
+          this.toast('下载后解压覆盖原扩展目录，再在扩展管理页重新加载。更新前可导出项目备份。');return;
+        }
+        button.disabled=true;status.textContent='检查中…';
+        try{
+          const allowed=await chrome.permissions.request({origins:['https://api.github.com/*']});
+          if(!allowed){status.textContent='未授予权限';return;}
+          const result=await globalThis.QuickdrawUpdates.check(chrome.runtime.getManifest().version);
+          if(result.available){this.availableUpdate=result;status.textContent=`下载 v${result.version} ↗`;button.title='点击下载新版，解压覆盖原目录后重新加载扩展';}
+          else status.textContent='已是最新版本';
+        }catch(error){status.textContent='检查失败，可重试';this.toast(error?.message||'无法连接 GitHub，请稍后重试。');}
+        finally{button.disabled=false;}
+      });
+      $('#btn-project-github').addEventListener('click',()=>{this.closePopovers();chrome.tabs.create({url:'https://github.com/baize7815/quickdraw-sidepanel'});});
       $('#btn-arrange').addEventListener('click',e=>{e.stopPropagation();toggle('#arrange-popover');});
       $$('.popover').forEach(p=>p.addEventListener('click',e=>e.stopPropagation()));
       document.addEventListener('pointerdown',e=>{if(!e.target.closest('.popover,.tool-btn,#files-btn'))this.closePopovers();});
@@ -2150,7 +2176,6 @@
       $$('#grid-control button').forEach(b=>b.addEventListener('click',()=>{this.gridType=b.dataset.grid;this.syncGridUI();this.savePreferences();this.render();}));
       $$('#theme-control button').forEach(b=>b.addEventListener('click',()=>{this.theme=b.dataset.theme;this.applyTheme();this.savePreferences();this.render();}));
       $$('#snap-control button').forEach(b=>b.addEventListener('click',()=>{this.snapToGrid=b.dataset.enabled==='true';this.syncPreferenceUI();this.savePreferences();}));
-      $('#ai-provider-select').addEventListener('change',e=>this.setAIProvider(e.target.value));
       this.updateMindStyleUI();
       this.syncPreferenceUI();
       for(const dialog of $$('.confirm-backdrop,.mermaid-backdrop,.ai-backdrop'))dialog.addEventListener('keydown',e=>this.trapDialogFocus(dialog,e));
@@ -2241,8 +2266,7 @@
     }
 
     syncAIProviderUI(){
-      const select=$('#ai-provider-select'),taskSelect=$('#ai-task-provider');
-      if(select)select.value=this.aiProvider||'gpt';
+      const taskSelect=$('#ai-task-provider');
       if(taskSelect)taskSelect.value=this.aiProvider||'gpt';
     }
 
@@ -2326,8 +2350,6 @@
         if(receipt&&task.status!=='imported'){const button=document.createElement('button');button.type='button';button.textContent='确认已写入';button.addEventListener('click',()=>this.ackAIReceipt(task));row.append(button);}
         root.append(row);
       }
-      const menuStatus=$('#ai-menu-status');
-      if(menuStatus){menuStatus.textContent=tasks.length?`${tasks.length} 项`:'无';}
     }
 
     openAIMindmapDialog(showPending=false){
@@ -2497,6 +2519,10 @@
       const provider=globalThis.QuickdrawAI?.provider(providerId),label=provider?.label||'AI';
       if(!provider?.enabled)return false;
       const origins=[...(provider.origins||[]),...(provider.authOrigins||[]),...(image?(provider.imageOrigins||[]):[])];
+      if(/Edg\//.test(globalThis.navigator?.userAgent||'')){
+        // Request before awaiting contains(), preserving click activation on Edge.
+        try{return await chrome.permissions.request({origins});}catch(error){this.showAITaskError(`无法取得${label}网站权限：${error?.message||'请在扩展权限设置中允许后重试。'}`);return false;}
+      }
       try{if(await chrome.permissions.contains({origins}))return true;}catch{}
       try{return await chrome.permissions.request({origins});}catch(error){this.showAITaskError(`无法取得${label}网站权限，请在扩展权限设置中允许后重试。`);return false;}
     }
@@ -2571,7 +2597,7 @@
         const maxImages=Number(provider.maxInputImages||globalThis.QuickdrawAI?.MAX_INPUT_IMAGES||4);
         if(units.length>maxImages)throw new Error(`${provider.label} 当前一次最多处理 ${maxImages} 张图片，请减少选区后重试。`);
         for(const unit of units){
-          const blob=await this.createPNGBlob(true,unit.items);
+          const blob=await this.createPNGBlob(true,unit.items,0);
           if(!globalThis.QuickdrawAIImage?.inspectBlob)throw new Error('图片校验不可用。');
           await globalThis.QuickdrawAIImage.inspectBlob(blob,{maxBytes:globalThis.QuickdrawAIImage.MAX_INPUT_BYTES});
           const assetId=await this.store.putAsset(blob,{sourceUrl:'quickdraw-selection',aiInput:true,createdBy:this.instanceId,aiInputOrder:unit.order});

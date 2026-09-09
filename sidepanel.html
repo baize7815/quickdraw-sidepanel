@@ -220,7 +220,8 @@
       <button class="menu-item" id="btn-search"><span>查找画板内容</span><kbd>Ctrl F</kbd></button>
       <button class="menu-item" id="btn-edit-mermaid"><span>编辑 Mermaid 源码</span></button>
       <button class="menu-item" id="btn-copy-mermaid"><span>复制 Mermaid 源码</span></button>
-      <button class="menu-item" id="btn-ai-pending"><span>待导入脑图</span><span class="menu-value" id="ai-menu-status">无</span></button>
+      <button class="menu-item" id="btn-help"><span>查看帮助</span><span class="menu-value">快捷键与说明</span></button>
+      <button class="menu-item" id="btn-check-update"><span>检查更新</span><span class="menu-value" id="update-status">手动检查</span></button>
       <div class="menu-divider"></div>
       <button class="menu-item" id="btn-fit"><span>缩放至内容</span><kbd>F</kbd></button>
       <button class="menu-item" id="btn-clear"><span>清空画板</span></button>
@@ -238,11 +239,7 @@
         <button data-theme="dark" title="深色">☾</button>
       </div></div>
       <div class="menu-control"><span>网格吸附</span><div class="seg" id="snap-control"><button data-enabled="false">关</button><button data-enabled="true" class="active">开</button></div></div>
-      <div class="menu-control ai-provider-control"><label for="ai-provider-select">默认 AI</label><select id="ai-provider-select" class="provider-select" aria-label="默认 AI">
-        <option value="gpt">GPT</option>
-        <option value="doubao">豆包</option>
-        <option value="grok">Grok</option>
-      </select></div>
+      <button class="menu-item" id="btn-project-github" title="https://github.com/baize7815/quickdraw-sidepanel"><span>GitHub 项目</span><span class="menu-value">baize7815/quickdraw-sidepanel ↗</span></button>
     </div>
 
     <footer class="zoom-bar">
@@ -333,6 +330,7 @@
   <script src="ai-image-presets.js"></script>
   <script src="ai-protocol.js"></script>
   <script src="ai-task-store.js"></script>
+  <script src="update-checker.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

@@ -53,7 +53,9 @@ Quickdraw is not Figma and not Photoshop. It finishes the job of “note it, dra
 
 ## Install
 
-**Latest release: [v3.7.4](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.7.4)** — multi-image import and selected-object PNG / SVG downloads. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.7.4/quickdraw-sidepanel-v3.7.4.zip), extract it, and load the folder containing `manifest.json` using the steps below.
+**Latest release: [v3.7.5](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.7.5)** — manual update checks, help, cancellable background removal and Edge compatibility fixes. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.7.5/quickdraw-sidepanel-v3.7.5.zip), extract it, and load the folder containing `manifest.json` using the steps below.
+
+Use **Check for updates** in the More menu to check GitHub manually; there are no periodic checks. Updating an unpacked extension requires extracting the new ZIP over the original folder and clicking Reload in the extension manager. Export a project backup first; do not uninstall the extension.
 
 The public install path is unpacked source. Use desktop **Chrome 116 or newer**. Other Chromium browsers need the matching extension APIs; verify them yourself.
 

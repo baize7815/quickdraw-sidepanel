@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Quickdraw 使用帮助</title><link rel="stylesheet" href="help.css"></head>
+<body><main>
+<p class="eyebrow">QUICKDRAW · 使用帮助</p><h1>把想法放到画板上</h1>
+<p>在侧边栏绘图、整理脑图和编辑图片。快捷键在画布获得焦点时使用，输入文字时不会切换工具。</p>
+<h2>常用操作</h2><table><thead><tr><th>快捷键</th><th>操作</th></tr></thead><tbody>
+<tr><td>Ctrl / ⌘ + Z</td><td>撤销</td></tr><tr><td>Ctrl / ⌘ + Shift + Z，Ctrl + Y</td><td>重做</td></tr>
+<tr><td>Ctrl / ⌘ + C</td><td>把选中对象复制为透明 PNG</td></tr><tr><td>Ctrl / ⌘ + V</td><td>粘贴图片或剪贴板内容</td></tr>
+<tr><td>Ctrl / ⌘ + D</td><td>复制所选对象</td></tr><tr><td>Ctrl / ⌘ + G / Shift + G</td><td>编组 / 取消编组</td></tr>
+<tr><td>Delete / Backspace</td><td>删除选中对象</td></tr><tr><td>方向键 / Shift + 方向键</td><td>小幅 / 大幅移动选中对象</td></tr>
+<tr><td>按住空格并拖动</td><td>平移画布</td></tr><tr><td>F</td><td>缩放至全部内容</td></tr>
+<tr><td>Ctrl / ⌘ + F</td><td>查找画板内容</td></tr><tr><td>Shift + E</td><td>导出 PNG</td></tr>
+<tr><td>Alt + T / L / R / B</td><td>顶部 / 左侧 / 右侧 / 底部对齐</td></tr>
+<tr><td>Esc</td><td>取消当前操作；抠图过程中停止等待和后续批次</td></tr>
+</tbody></table>
+<h2>绘图工具</h2><p>V / 1 选择，H / 2 抓手，D / 3 画笔，I / 4 荧光笔，E / 5 橡皮擦，K / 6 钢笔，L / 7 直线，A / 8 箭头，G / 9 几何图形，T 文字，N 便签，M 脑图。</p>
+<p>选中脑图节点后，Tab 创建子节点，Shift + Tab 创建同级节点。钢笔单击添加锚点，拖动设置曲线，Enter 完成开放路径，点击起点闭合。</p>
+<h2>图片与 AI</h2>
+<p>选中图片后可裁剪、旋转、镜像和抠图。AI 图片对话框内可切换 GPT、豆包或 Grok；只发送你填写的提示词。多选图片会按任务支持的数量一起作为参考，不额外添加透明边框。</p>
+<p>AI 抠图使用 koukoutu.com。首次抠图会打开一次服务网站，等待加载后继续；如网站要求验证，请自行完成。扩展记录访问标记，不读取匿名 ID。网站数据被清理或验证失效后，可能需要重新访问。</p>
+<p>在侧边栏按 Esc 可取消抠图，当前请求及后续批次会停止，已完成图片保留并可撤销。已提交到服务端的计算不一定会随本地取消而停止。</p>
+<p>GPT、豆包和 Grok 使用同一浏览器配置中的专用标签页，需要先登录并授予对应网站权限。豆包会打开到前台，请保持页面可见。点击画板上的 AI 进度入口可查看任务；如不能自动插入结果，可在任务详情中手动插入。</p>
+<h2>保存与导出</h2><p>画板保存在当前浏览器的扩展本地存储中。Chrome 与 Edge 的数据独立；跨浏览器迁移或备份请使用“导出 Quickdraw 项目”和“导入 Quickdraw 项目”。清理扩展数据或卸载前请先导出备份。</p>
+<p>更多菜单提供 PNG、透明 PNG、SVG 和所选对象导出。修改扩展文件后，在浏览器扩展管理页重新加载扩展，再关闭并重开侧边栏。</p>
+<h2>检查更新</h2><p>更多菜单中的“检查更新”仅在点击时连接 GitHub，没有定时检查。首次使用需要允许访问 GitHub API。发现新版后，再点击该项下载安装包。先导出项目备份，再解压覆盖原扩展目录，到扩展管理页点击“重新加载”，最后重开侧边栏。无需卸载扩展。</p>
+<footer><a href="https://github.com/baize7815/quickdraw-sidepanel" target="_blank" rel="noopener noreferrer">GitHub · baize7815/quickdraw-sidepanel ↗</a></footer>
+</main></body></html>
