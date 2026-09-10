@@ -2834,7 +2834,7 @@
       const items=this.exportElementsFor(requested);if(requested&&!items.length)throw new Error('empty-export');
       await this.waitForImages(items);
       this.exportAssetData=new Map();for(const el of items.filter(item=>item.type==='image'&&item.assetId)){const asset=await this.store.getAsset(el.assetId);if(asset?.blob)this.exportAssetData.set(el.assetId,await this.store.blobToDataUrl(asset.blob));}
-      const b=this.getElementsBBox(items)||{x:(-this.offsetX)/this.scale,y:(-this.offsetY)/this.scale,w:this.width/this.scale,h:this.height/this.scale},pad=32,x=b.x-pad,y=b.y-pad,w=Math.max(1,b.w+pad*2),h=Math.max(1,b.h+pad*2),paper=this.theme==='dark'?'#191713':'#F9FAFB';
+      const b=this.getElementsBBox(items)||{x:(-this.offsetX)/this.scale,y:(-this.offsetY)/this.scale,w:this.width/this.scale,h:this.height/this.scale},pad=0,x=b.x-pad,y=b.y-pad,w=Math.max(1,b.w+pad*2),h=Math.max(1,b.h+pad*2),paper=this.theme==='dark'?'#191713':'#F9FAFB';
       const patternColors=[...new Set(items.filter(el=>el.fill==='pattern').map(el=>el.color||this.currentColor))],defs=`<defs>${patternColors.map(color=>`<pattern id="${this.patternId(color)}" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="${this.xmlEscape(color)}" stroke-width="1.2" opacity=".35"/></pattern>`).join('')}</defs>`;
       const background=transparent?'':`<rect x="${this.svgNum(x)}" y="${this.svgNum(y)}" width="${this.svgNum(w)}" height="${this.svgNum(h)}" fill="${paper}"/>`;
       const body=this.svgMindConnectionsMarkup(items)+items.map(el=>this.svgElementMarkup(el)).join('');
@@ -2884,7 +2884,7 @@
 
     async waitForImages(items=this.elements){await Promise.all(items.filter(e=>e.type==='image').map(e=>new Promise(resolve=>{const img=this.getCachedImage(e);if(img?.complete&&img.naturalWidth)return resolve();const done=()=>resolve();img?.addEventListener('load',done,{once:true});img?.addEventListener('error',done,{once:true});setTimeout(done,2000);})));}
 
-    async createPNGBlob(transparent=false,requested=null,padding=32){
+    async createPNGBlob(transparent=false,requested=null,padding=8){
       const items=this.exportElementsFor(requested);if(!items.length)throw new Error('empty-export');await this.waitForImages(items);this.exporting=true;
       try{const b=this.getElementsBBox(items)||{x:(-this.offsetX)/this.scale,y:(-this.offsetY)/this.scale,w:this.width/this.scale,h:this.height/this.scale},pad=padding,scale=2,width=Math.ceil((b.w+pad*2)*scale),height=Math.ceil((b.h+pad*2)*scale);if(width>32767||height>32767||width*height>120_000_000)throw new Error('canvas-too-large');const c=document.createElement('canvas');c.width=width;c.height=height;const ctx=c.getContext('2d');if(!ctx)throw new Error('canvas-unavailable');if(!transparent){ctx.fillStyle=this.theme==='dark'?'#191713':'#F9FAFB';ctx.fillRect(0,0,c.width,c.height);}ctx.save();ctx.scale(scale,scale);ctx.translate(-b.x+pad,-b.y+pad);for(const edge of items)if(edge.type==='mindedge')this.drawMindEdge(ctx,edge,false);for(const el of items)if(el.type!=='mindedge')this.drawElement(ctx,el);ctx.restore();return await new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error('png-encode-failed')),'image/png'));}finally{this.exporting=false;}
     }
