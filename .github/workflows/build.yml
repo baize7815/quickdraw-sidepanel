@@ -1,27 +1,41 @@
-name: 打包扩展
+name: 打包并发布 Quickdraw
 
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
 
     steps:
       - name: 获取代码
         uses: actions/checkout@v5
 
-      - name: 打包 ZIP
+      - name: 读取版本号
+        id: version
         run: |
-          zip -r quickdraw-sidepanel.zip . \
+          VERSION=$(node -p "require('./manifest.json').version")
+          echo "version=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "filename=quickdraw-sidepanel-v$VERSION.zip" >> "$GITHUB_OUTPUT"
+
+      - name: 打包扩展
+        run: |
+          zip -r "${{ steps.version.outputs.filename }}" . \
             -x ".git/*" \
                ".github/*" \
                "tests/*" \
                "releases/*" \
                "*.zip"
 
-      - name: 上传打包文件
-        uses: actions/upload-artifact@v4
-        with:
-          name: quickdraw-sidepanel
-          path: quickdraw-sidepanel.zip
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.version }}" \
+            "${{ steps.version.outputs.filename }}" \
+            --title "Quickdraw ${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            --target "${{ github.sha }}"
