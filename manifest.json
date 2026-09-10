@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Quickdraw 侧边栏画板",
-  "version": "3.7.5",
+  "version": "3.7.6",
   "minimum_chrome_version": "116",
   "description": "本地侧边栏无限画布。支持钢笔矢量路径、透明轮廓转 SVG、旋转与镜像、图片遮罩、宫格切图、比例裁剪、AI 抠图及多格式导出。",
   "permissions": [
