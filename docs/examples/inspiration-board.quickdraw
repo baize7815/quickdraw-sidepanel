@@ -1,0 +1,208 @@
+{
+  "format": "quickdraw-project",
+  "version": 1,
+  "fileIndex": {
+    "files": [
+      {
+        "id": "demo-overview",
+        "name": "灵感工作台",
+        "updatedAt": 0
+      }
+    ],
+    "current": "demo-overview"
+  },
+  "documents": {
+    "demo-overview": {
+      "version": 4,
+      "revision": 0,
+      "elements": [
+        {
+          "id": "emtrcclx8017sb3t",
+          "type": "mindedge",
+          "fromId": "emtrcclx8h26i1f1",
+          "toId": "emtrcclx817z92se",
+          "fromSide": "right",
+          "toSide": "left",
+          "style": "curve",
+          "color": "#8b9bb9",
+          "size": 1.6
+        },
+        {
+          "id": "emtrcclx8uglbawy",
+          "type": "mindedge",
+          "fromId": "emtrcclx84kuh1qi",
+          "toId": "emtrcclx817z92se",
+          "fromSide": "right",
+          "toSide": "left",
+          "style": "curve",
+          "color": "#8b9bb9",
+          "size": 1.6
+        },
+        {
+          "id": "emtrcclx86284gpk",
+          "type": "mindedge",
+          "fromId": "emtrcclx8zqlo55e",
+          "toId": "emtrcclx8h26i1f1",
+          "fromSide": "right",
+          "toSide": "left",
+          "style": "curve",
+          "color": "#8b9bb9",
+          "size": 1.6
+        },
+        {
+          "id": "emtrcclx86iddrcu",
+          "type": "mindedge",
+          "fromId": "emtrcclx8zqlo55e",
+          "toId": "emtrcclx84kuh1qi",
+          "fromSide": "right",
+          "toSide": "left",
+          "style": "curve",
+          "color": "#8b9bb9",
+          "size": 1.6
+        },
+        {
+          "id": "emtrcclx87wsskzg",
+          "type": "text",
+          "text": "让网页里的灵感，留在画板里。",
+          "x": 110,
+          "y": 124,
+          "fontSize": 38,
+          "color": "#222c3f"
+        },
+        {
+          "id": "emtrcclx8h81l4b6",
+          "type": "text",
+          "text": "素材、便签、可编辑流程图，在一个地方接着做。",
+          "x": 112,
+          "y": 187,
+          "fontSize": 21,
+          "color": "#65718a"
+        },
+        {
+          "id": "emtrcclx8uyc2l4u",
+          "type": "text",
+          "text": "01  收集",
+          "x": 112,
+          "y": 253,
+          "fontSize": 22,
+          "color": "#65718a"
+        },
+        {
+          "id": "emtrcclx8pp1uxm6",
+          "type": "text",
+          "text": "02  梳理",
+          "x": 550,
+          "y": 253,
+          "fontSize": 22,
+          "color": "#65718a"
+        },
+        {
+          "id": "emtrcclx89e4i94a",
+          "type": "text",
+          "text": "03  表达",
+          "x": 1103,
+          "y": 253,
+          "fontSize": 22,
+          "color": "#65718a"
+        },
+        {
+          "id": "emtrcclx87wqtckj",
+          "type": "note",
+          "x": 110,
+          "y": 303,
+          "w": 325,
+          "h": 345,
+          "fontSize": 20,
+          "color": "#374461",
+          "bgColor": "#e9efff",
+          "text": "# 灵感收集箱\n\n**阅读 → 整理 → 表达**\n\n- 网页文字变成便签\n- 图片放在同一画板\n- 用箭头标出关联\n\n今天的想法，留在这里。"
+        },
+        {
+          "id": "emtrcclx8zqlo55e",
+          "type": "mindnode",
+          "mermaid": true,
+          "text": "一个新项目",
+          "x": 530,
+          "y": 402,
+          "w": 200,
+          "h": 66,
+          "fontSize": 23,
+          "color": "#6e8ce0",
+          "bgColor": "#eaf0ff",
+          "textColor": "#263248",
+          "nodeShape": "rounded"
+        },
+        {
+          "id": "emtrcclx84kuh1qi",
+          "type": "mindnode",
+          "mermaid": true,
+          "text": "结构化流程",
+          "x": 818,
+          "y": 327,
+          "w": 196,
+          "h": 64,
+          "fontSize": 23,
+          "color": "#9a8dce",
+          "bgColor": "#f1edfc",
+          "textColor": "#263248",
+          "nodeShape": "rounded"
+        },
+        {
+          "id": "emtrcclx8h26i1f1",
+          "type": "mindnode",
+          "mermaid": true,
+          "text": "整理图像",
+          "x": 818,
+          "y": 492,
+          "w": 196,
+          "h": 64,
+          "fontSize": 23,
+          "color": "#67a68c",
+          "bgColor": "#e7f4ec",
+          "textColor": "#263248",
+          "nodeShape": "rounded"
+        },
+        {
+          "id": "emtrcclx817z92se",
+          "type": "mindnode",
+          "mermaid": true,
+          "text": "PNG · SVG",
+          "x": 1100,
+          "y": 404,
+          "w": 183,
+          "h": 64,
+          "fontSize": 23,
+          "color": "#d0a870",
+          "bgColor": "#fff3df",
+          "textColor": "#263248",
+          "nodeShape": "rounded"
+        },
+        {
+          "id": "emtrcclx82mtkrxe",
+          "type": "text",
+          "text": "独立节点，可移动、改色、重新连接",
+          "x": 553,
+          "y": 610,
+          "fontSize": 19,
+          "color": "#65718a"
+        },
+        {
+          "id": "emtrcclx8lh6txom",
+          "type": "text",
+          "text": "本地保存 · 多画板\n.quickdraw 项目备份",
+          "x": 1030,
+          "y": 579,
+          "fontSize": 19,
+          "color": "#65718a"
+        }
+      ],
+      "camera": {
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0
+      },
+      "aiTaskReceipts": {}
+    }
+  },
+  "assets": []
+}

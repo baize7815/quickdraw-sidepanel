@@ -16,13 +16,21 @@ A local-first Chrome side panel for collecting web material, arranging Markdown 
 ![Local first](https://img.shields.io/badge/Storage-Local--first-5b4db0)
 [![MIT License](https://img.shields.io/badge/License-MIT-4263EB)](LICENSE)
 
-[Install](#install) · [Why this exists](#why-this-exists) · [Try it](#try-it) · [Features](#features) · [AI](#ai) · [Privacy](#local-data-and-network-access)
+[Install](#install) · [Tutorial](https://www.bilibili.com/video/BV1UkYg6FEEG/) · [Why this exists](#why-this-exists) · [Try it](#try-it) · [Features](#features) · [AI](#ai) · [Privacy](#local-data-and-network-access)
 
 </div>
 
 ![Annotated full-board screenshot: Markdown notes on the left, an editable flowchart in the center, plus board, tool, and style callouts](docs/images/overview.png)
 
 <p align="center"><sub>Real UI in full-tab mode. Blue markers: ① boards ② fit canvas ③ drawing tools ④ style panel. The same board also opens in Chrome’s side panel, next to the page you are reading.</sub></p>
+
+Watch the walkthrough on Bilibili: **[quickdraw扩展教程](https://www.bilibili.com/video/BV1UkYg6FEEG/)** (~2:35). It covers capture, crop/collage, cutout, AI image edits, flowcharts, and PNG/SVG export.
+
+<div align="center">
+
+[![Watch the Quickdraw tutorial on Bilibili](https://i1.hdslb.com/bfs/archive/e370ef087fd99152c9ae4ef9173c3a05d7b84832.jpg)](https://www.bilibili.com/video/BV1UkYg6FEEG/)
+
+</div>
 
 ## Why this exists
 
@@ -53,7 +61,7 @@ Quickdraw is not Figma and not Photoshop. It finishes the job of “note it, dra
 
 ## Install
 
-**Latest release: [v3.8.7](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.8.7)** — editable Mermaid import, AI diagram generation, Dola provider, transparent-pixel crop, and manual update checks. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.8.7/quickdraw-sidepanel-v3.8.7.zip), extract it, and load the folder containing `manifest.json` using the steps below.
+**Latest release: [v3.8.8](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.8.8)** — restores documentation images and adds the Bilibili walkthrough. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.8.8/quickdraw-sidepanel-v3.8.8.zip), extract it, and load the folder containing `manifest.json` using the steps below.
 
 Use **Check for updates** in the More menu to check GitHub manually; there are no periodic checks. Updating an unpacked extension requires extracting the new ZIP over the original folder and clicking Reload in the extension manager. Export a project backup first; do not uninstall the extension.
 

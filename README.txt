@@ -1,4 +1,9 @@
-Quickdraw 侧边栏画板 v3.8.7
+Quickdraw 侧边栏画板 v3.8.8
+
+v3.8.8 发行版更新
+
+- 补回 README 文档配图与示例项目。
+- README 增加 B 站使用教程：https://www.bilibili.com/video/BV1UkYg6FEEG/
 
 v3.8.7 发行版更新
 

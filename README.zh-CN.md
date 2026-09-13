@@ -16,13 +16,21 @@ English: [README.md](README.md)
 ![Local first](https://img.shields.io/badge/Storage-Local--first-5b4db0)
 [![MIT License](https://img.shields.io/badge/License-MIT-4263EB)](LICENSE)
 
-[快速安装](#快速安装) · [它解决什么问题](#它解决什么问题) · [动手试试](#动手试试) · [功能一览](#功能一览) · [AI 使用说明](#ai-使用说明) · [本地数据](#本地数据与网络访问)
+[快速安装](#快速安装) · [使用教程](https://www.bilibili.com/video/BV1UkYg6FEEG/) · [它解决什么问题](#它解决什么问题) · [动手试试](#动手试试) · [功能一览](#功能一览) · [AI 使用说明](#ai-使用说明) · [本地数据](#本地数据与网络访问)
 
 </div>
 
 ![Quickdraw 全幅画板：左侧 Markdown 便签，中间可编辑流程图，以及多画板、绘图工具和样式入口标注](docs/images/overview.png)
 
 <p align="center"><sub>真实界面的全幅模式截图。蓝色编号为文档标注：① 多画板 ② 适应画布 ③ 绘图工具 ④ 样式面板。同一套画板也可以开在 Chrome 侧边栏里，和网页并排使用。</sub></p>
+
+使用教程见 B 站：**[quickdraw扩展教程](https://www.bilibili.com/video/BV1UkYg6FEEG/)**（约 2 分 35 秒），覆盖抓图、切图/拼图、抠图、AI 改图、流程图和 PNG/SVG 导出。
+
+<div align="center">
+
+[![在 B 站观看 Quickdraw 使用教程](https://i1.hdslb.com/bfs/archive/e370ef087fd99152c9ae4ef9173c3a05d7b84832.jpg)](https://www.bilibili.com/video/BV1UkYg6FEEG/)
+
+</div>
 
 ## 它解决什么问题
 
@@ -53,7 +61,7 @@ Quickdraw 不是 Figma，也不是完整的 Photoshop。它把「看网页时顺
 
 ## 快速安装
 
-**最新发行版：[v3.8.7](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.8.7)**，增加可编辑 Mermaid 多图表导入、AI 图表生成、Dola 平台、透明像素裁剪及手动检查更新。[下载安装包](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.8.7/quickdraw-sidepanel-v3.8.7.zip)并解压，按下方步骤加载包含 `manifest.json` 的目录。
+**最新发行版：[v3.8.8](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.8.8)**，补回文档配图，并加入 B 站使用教程。[下载安装包](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.8.8/quickdraw-sidepanel-v3.8.8.zip)并解压，按下方步骤加载包含 `manifest.json` 的目录。
 
 更多菜单中的“检查更新”只在点击时访问 GitHub，不进行每日或后台定时检查。发现新版后点击下载，先导出项目备份，再解压覆盖原扩展目录，在扩展管理页点击“重新加载”并重开侧边栏；无需卸载扩展。
 
