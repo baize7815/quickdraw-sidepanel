@@ -5,8 +5,9 @@
   const svg=body=>`<svg viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
   const button=(name,title,body)=>`<button type="button" class="icon-btn" data-edit="${name}" title="${title}" aria-label="${title}">${svg(body)}</button>`;
   const toBlob=canvas=>new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('图片编码失败。')),'image/png'));
+  const MAX_CANVAS_SIDE=16384, MAX_CANVAS_AREA=18_000_000;
   const makeCanvas=(w,h)=>{
-    if(!Number.isFinite(w*h)||w<1||h<1||w>16384||h>16384||w*h>12_000_000)throw new Error('处理范围超过 1200 万像素或单边 16384 像素，请先缩小图片。');
+    if(!Number.isFinite(w*h)||w<1||h<1||w>MAX_CANVAS_SIDE||h>MAX_CANVAS_SIDE||w*h>MAX_CANVAS_AREA)throw new Error('处理范围超过 1800 万像素或单边 16384 像素，请先缩小图片。');
     const canvas=document.createElement('canvas');canvas.width=Math.ceil(w);canvas.height=Math.ceil(h);return canvas;
   };
   const shapeTypes=new Set(['rect','ellipse','triangle','diamond','hexagon','star','cloud','draw','highlight','line','arrow','path']);
@@ -23,7 +24,7 @@
       }
       for(const [selector,title,icon] of [['#btn-layout-mind','自动整理分支','M3 10h5v5H3zM16 3h5v5h-5zM16 16h5v5h-5zM8 12h4M12 5v14M12 5h4M12 19h4'],['#btn-collapse-mind','折叠 / 展开分支','M4 4h16v16H4zM8 12h8M12 8v8']]){const b=$(selector);b.innerHTML=svg(`<path d="${icon}"/>`);b.title=title;b.setAttribute('aria-label',title);b.classList.add('arrange-icon');}
       const action=document.createElement('div');action.className='image-extra-actions';
-      action.innerHTML=button('grid','宫格切图（列 × 行）','<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>')+button('trace-menu','透明轮廓转 SVG 形状','<path d="M5 7c-3 5 0 12 5 12 7 0 11-5 8-11-3-6-10-6-13-1z"/><rect x="3" y="5" width="4" height="4"/><rect x="16" y="6" width="4" height="4"/><rect x="8" y="17" width="4" height="4"/>');
+      action.innerHTML=button('grid','宫格切图（列 × 行）','<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>')+button('trace-menu','透明轮廓转 SVG 形状','<path d="M5 7c-3 5 0 12 5 12 7 0 11-5 8-11-3-6-10-6-13-1z"/><rect x="3" y="5" width="4" height="4"/><rect x="16" y="6" width="4" height="4"/><rect x="8" y="17" width="4" height="4"/>')+button('trim-alpha','裁剪透明像素','<path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path d="m8 8 2 2m6-2-2 2m-6 6 2-2m6 2-2-2"/>');
       action.insertAdjacentHTML('beforeend',button('stitch-grid','宫格拼图','<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/>'));
       $('.actionbar').append(action);
       const root=document.createElement('div');root.id='editing-ui';root.innerHTML=`
@@ -81,6 +82,7 @@
       if(action==='grid'||action==='stitch-grid')return this.openGridEditor(action==='grid'?'split':'stitch');
       if(action==='trace-menu')return this.toggleEditingPopover('trace-popover');
       if(action==='trace')return this.traceImageOutline();
+      if(action==='trim-alpha')return this.trimTransparentPixels();
       if(action==='edit-nodes'){this.setTool('pen');this.render();return;}
       if(action==='flip-x'||action==='flip-y')return this.flipSelection(action==='flip-x'?'x':'y');
       if(action==='rotate')return this.rotateSelection(Math.PI/2);
@@ -164,7 +166,7 @@
       this.closePopovers();this.gridMode=mode;this.gridTargetState=JSON.stringify(targets);
       const f=$('#grid-custom');if(mode==='stitch'){f.elements.cols.value=Math.ceil(Math.sqrt(targets.length));f.elements.rows.value=Math.ceil(targets.length/Number(f.elements.cols.value));}
       $('#grid-title').textContent=mode==='stitch'?'宫格拼图':'宫格切图';$('#grid-apply').textContent=mode==='stitch'?'生成拼图':'确认切割';
-      $('#grid-help').textContent=mode==='stitch'?'按画布从上到下、从左到右排列；等大格内完整显示图片。正数留透明间距，负数重叠，后图覆盖前图。生成新图片，原群组保留。':'间距按原图像素计算：0 无缝，正数跳过格间区域，负数让相邻切片重叠。最多 100 块，支持撤销。';
+      $('#grid-help').textContent=mode==='stitch'?'按画布从上到下、从左到右排列；等大格内完整显示图片。正数留透明间距，负数重叠，后图覆盖前图。超过 1800 万像素或单边 16384 像素时自动等比缩小并在下方提示缩放比例。生成新图片，原群组保留。':'间距按原图像素计算：0 无缝，正数跳过格间区域，负数让相邻切片重叠。最多 100 块，支持撤销。';
       $('#grid-popover').hidden=false;this.refreshGridPreview();
     },
     async loadGridSources(targets){
@@ -179,11 +181,25 @@
       // Form visual rows before sorting horizontally; slight vertical offsets remain in the same row.
       const pending=[...tiles].sort((a,b)=>a.b.y-b.b.y||a.b.x-b.b.x),ordered=[];
       while(pending.length){const first=pending.shift(),row=[first];for(let i=0;i<pending.length;){if(pending[i].b.y-first.b.y<Math.min(first.b.h,pending[i].b.h)/2)row.push(...pending.splice(i,1));else i++;}ordered.push(...row.sort((a,b)=>a.b.x-b.b.x));}
-      const cellW=Math.ceil(Math.max(...tiles.map(t=>t.w))),cellH=Math.ceil(Math.max(...tiles.map(t=>t.h)));
-      if((cols>1&&cellW+gap<1)||(rows>1&&cellH+gap<1))throw new Error('重叠过大，相邻格子需至少相隔 1 像素。');
-      const width=cols*cellW+(cols-1)*gap,height=rows*cellH+(rows-1)*gap;
-      if(!Number.isFinite(width*height)||width<1||height<1||width>16384||height>16384||width*height>12_000_000)throw new Error('拼图超过 1200 万像素或单边 16384 像素，请减少行列或缩小间距。');
-      return {width,height,tiles:ordered.map((t,i)=>({...t,x:(i%cols)*(cellW+gap),y:Math.floor(i/cols)*(cellH+gap),cellW,cellH}))};
+      const rawCellW=Math.ceil(Math.max(...tiles.map(t=>t.w))),rawCellH=Math.ceil(Math.max(...tiles.map(t=>t.h)));
+      if((cols>1&&rawCellW+gap<1)||(rows>1&&rawCellH+gap<1))throw new Error('重叠过大，相邻格子需至少相隔 1 像素。');
+      const rawWidth=cols*rawCellW+(cols-1)*gap,rawHeight=rows*rawCellH+(rows-1)*gap;
+      if(!Number.isFinite(rawWidth*rawHeight)||rawWidth<1||rawHeight<1)throw new Error('拼图尺寸无效，请调整行列或间距。');
+      const scale=Math.min(1,this.fitCanvasScale(rawWidth,rawHeight));
+      let cellW=rawCellW,cellH=rawCellH,spacing=gap;
+      if(scale<1){
+        cellW=Math.max(1,Math.floor(rawCellW*scale));cellH=Math.max(1,Math.floor(rawCellH*scale));spacing=Math.floor(gap*scale);
+        if(cols>1)spacing=Math.max(spacing,1-cellW);
+        if(rows>1)spacing=Math.max(spacing,1-cellH);
+      }
+      const width=cols*cellW+(cols-1)*spacing,height=rows*cellH+(rows-1)*spacing;
+      if(width>MAX_CANVAS_SIDE||height>MAX_CANVAS_SIDE||width*height>MAX_CANVAS_AREA)throw new Error('自动缩放后仍超出上限，请减少行列或缩小间距。');
+      return {width,height,cellW,cellH,scale,scaled:scale<1,requested:{width:rawWidth,height:rawHeight},tiles:ordered.map((t,i)=>({...t,x:(i%cols)*(cellW+spacing),y:Math.floor(i/cols)*(cellH+spacing),cellW,cellH}))};
+    },
+    fitCanvasScale(width,height){
+      if(!Number.isFinite(width*height)||width<1||height<1)return 1;
+      const k=Math.min(MAX_CANVAS_SIDE/width,MAX_CANVAS_SIDE/height,Math.sqrt(MAX_CANVAS_AREA/(width*height)));
+      return Number.isFinite(k)&&k>0?k:1;
     },
     drawGridStitch(ctx,layout){
       for(const t of layout.tiles){const fit=Math.min(t.cellW/t.w,t.cellH/t.h);ctx.save();ctx.translate(t.x+(t.cellW-t.w*fit)/2,t.y+(t.cellH-t.h*fit)/2);ctx.scale(t.density*fit,t.density*fit);ctx.translate(-t.b.x,-t.b.y);ctx.transform(...V.matrix(t.el));ctx.drawImage(t.source.drawable,t.el.x,t.el.y,t.el.w,t.el.h);ctx.restore();}
@@ -207,7 +223,7 @@
           for(const c of cells){ctx.drawImage(source.drawable,c.x,c.y,c.w,c.h,c.x,c.y,c.w,c.h);ctx.fillStyle='rgba(47,111,237,.08)';ctx.fillRect(c.x,c.y,c.w,c.h);}
           ctx.lineWidth=1/scale;ctx.strokeStyle='#76a5ff';for(const c of cells)ctx.strokeRect(c.x,c.y,c.w,c.h);
         }
-        status.textContent=layout?`${sources.length} 张图片 · ${width} × ${height} px`:`${cols*rows} 块 · 原图 ${source.width} × ${source.height} px`;this.gridPreviewReady=true;apply.disabled=!!this.editingBusy;
+        status.textContent=layout?`${sources.length} 张图片 · ${width} × ${height} px${layout.scaled?` · 已自动缩放至 ${Math.round(layout.scale*100)}%（原 ${layout.requested.width} × ${layout.requested.height}）`:''}`:`${cols*rows} 块 · 原图 ${source.width} × ${source.height} px`;this.gridPreviewReady=true;apply.disabled=!!this.editingBusy;
       }catch(error){if(token===this.gridPreviewToken){status.textContent=error.message;apply.disabled=true;}}
       finally{for(const {source} of sources)source.dispose();}
     },
@@ -216,7 +232,7 @@
       return this.runEditingTask(targets,async()=>{
         const sources=await this.loadGridSources(targets);
         try{const layout=this.gridStitchLayout(sources,cols,rows,gap),canvas=makeCanvas(layout.width,layout.height);this.drawGridStitch(canvas.getContext('2d'),layout);const assetId=await this.store.putAsset(await toBlob(canvas),{name:'宫格拼图.png'}),bounds=this.getElementsBBox(targets),displayScale=Math.min(1,bounds.w/layout.width);
-          return {items:[{id:id(),type:'image',assetId,x:bounds.x+bounds.w+24,y:bounds.y,w:layout.width*displayScale,h:layout.height*displayScale}],message:'已生成宫格拼图，原群组保留；支持撤销。'};
+          return {items:[{id:id(),type:'image',assetId,x:bounds.x+bounds.w+24,y:bounds.y,w:layout.width*displayScale,h:layout.height*displayScale}],message:layout.scaled?`已生成宫格拼图（${layout.width} × ${layout.height} px，已自动缩放至 ${Math.round(layout.scale*100)}%），原群组保留；支持撤销。`:'已生成宫格拼图，原群组保留；支持撤销。'};
         }finally{for(const {source} of sources)source.dispose();}
       });
     },
@@ -249,6 +265,26 @@
           const modes=operation==='split-mask'?['destination-in','destination-out']:[operation==='intersect'?'destination-in':'destination-out'],items=[];
           for(const mode of modes){const output=makeCanvas(base.width,base.height),out=output.getContext('2d',{willReadFrequently:true});out.drawImage(base,0,0);out.globalCompositeOperation=mode;out.drawImage(stencil,0,0);const data=out.getImageData(0,0,output.width,output.height).data;let visible=false;for(let i=3;i<data.length;i+=4)if(data[i]){visible=true;break;}if(!visible)continue;const assetId=await this.store.putAsset(await toBlob(output),{croppedFrom:image.assetId,method:operation});items.push({id:id(),type:'image',assetId,...bounds,sourceUrl:image.sourceUrl||''});}
           return {items,remove:[target,mask],message:operation==='split-mask'?`已分割为 ${items.length} 个图片对象，可独立移动。`:'遮罩处理完成，可撤销恢复原图和形状。'};
+        }finally{source.dispose();}
+      });
+    },
+
+    async trimTransparentPixels(){
+      const selected=this.getSelectedElements(),target=selected.length===1&&selected[0].type==='image'?selected[0]:null;if(!target)return this.toast('请先单独选择一张图片。');
+      this.toast('正在裁剪透明像素…');
+      return this.runEditingTask([target],async()=>{
+        const snapshot=clone(target),record=await this.store.getAsset(snapshot.assetId);if(!record?.blob)throw new Error('图片资源不存在。');const source=await this.loadCropDrawable(record.blob);
+        try{
+          const canvas=makeCanvas(source.width,source.height),ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(source.drawable,0,0);const pixels=ctx.getImageData(0,0,source.width,source.height).data;
+          let left=source.width,top=source.height,right=-1,bottom=-1;
+          for(let y=0;y<source.height;y+=1){const row=y*source.width*4;for(let x=0;x<source.width;x+=1){if(pixels[row+x*4+3]===0)continue;if(x<left)left=x;if(x>right)right=x;if(y<top)top=y;if(y>bottom)bottom=y;}}
+          if(right<left||bottom<top)throw new Error('图片完全透明，没有可保留的可见像素。');
+          if(left===0&&top===0&&right===source.width-1&&bottom===source.height-1)throw new Error('图片边缘没有透明像素，无需裁剪。');
+          const width=right-left+1,height=bottom-top+1,output=makeCanvas(width,height);output.getContext('2d').drawImage(source.drawable,left,top,width,height,0,0,width,height);
+          const assetId=await this.store.putAsset(await toBlob(output),{sourceUrl:snapshot.sourceUrl||'',croppedFrom:snapshot.assetId,method:'trim-transparent'}),scaleX=snapshot.w/source.width,scaleY=snapshot.h/source.height;
+          const trimmed={...snapshot,id:id(),assetId,x:snapshot.x+left*scaleX,y:snapshot.y+top*scaleY,w:width*scaleX,h:height*scaleY};
+          this.imageCache.delete(snapshot.assetId);this.getCachedImage(trimmed);
+          return {items:[trimmed],remove:[target],message:`已裁剪透明像素：${source.width} × ${source.height} → ${width} × ${height} px，可撤销恢复。`};
         }finally{source.dispose();}
       });
     },

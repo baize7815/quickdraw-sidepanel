@@ -44,8 +44,14 @@
           const contour=contours.get(i),approx=new cv.Mat();
           try{
             cv.approxPolyDP(contour,approx,.65,true);
-            const pts=[];for(let j=0;j<approx.data32S.length;j+=2)pts.push([approx.data32S[j]-.5,approx.data32S[j+1]-.5]);
-            if(pts.length<3){const box=cv.boundingRect(contour);pts.splice(0,pts.length,[box.x-1,box.y-1],[box.x+box.width-1,box.y-1],[box.x+box.width-1,box.y+box.height-1],[box.x-1,box.y+box.height-1]);}
+            // The mask is padded by 1px on every side, so contour coordinates
+            // live in an offset grid: -1 removes that padding, -0.5 moves the
+            // pixel centre to its grid corner => -1.5. The boundingRect fallback
+            // must match that convention: left/top use box.x/y-1.5, while the
+            // right/bottom sit on the last pixel (x+width-1), so they subtract
+            // 2.5 to land on the same grid corner. Verified against OpenCV output.
+            const pts=[];for(let j=0;j<approx.data32S.length;j+=2)pts.push([approx.data32S[j]-1.5,approx.data32S[j+1]-1.5]);
+            if(pts.length<3){const box=cv.boundingRect(contour);pts.splice(0,pts.length,[box.x-1.5,box.y-1.5],[box.x+box.width-2.5,box.y-1.5],[box.x+box.width-2.5,box.y+box.height-2.5],[box.x-1.5,box.y+box.height-2.5]);}
             vertices+=pts.length;if(vertices>200000)throw new Error('矢量节点超过 20 万，请缩小图片后重试。');output.push(pts);
           }finally{approx.delete();contour.delete();}
         }

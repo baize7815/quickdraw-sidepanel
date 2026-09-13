@@ -1,22 +1,73 @@
 (() => {
   'use strict';
 
-  if (globalThis.__quickdrawDoubaoContentLoaded) return;
-  globalThis.__quickdrawDoubaoContentLoaded = true;
+  if (globalThis.__quickdrawDolaContentLoaded) return;
+  globalThis.__quickdrawDolaContentLoaded = true;
 
   const active = new Map();
+  const HYDRATE_TIMEOUT = 120_000;
+  const UPLOAD_INACTIVITY_TIMEOUT = 180_000;
+  const SEND_TIMEOUT = 60_000;
+  const REPLY_TIMEOUT = 1_200_000;
+  const STABLE_WINDOW = 800;
+  const PROMPT_FILL_ATTEMPTS = 4;
+  const PROMPT_READBACK_TIMEOUT = 1_000;
+  const INCOMPLETE_ATTACHMENT_TIMEOUT = 8_000;
+  const RAW_MISSING_GRACE = 10_000;
+  // 多张结果图同时 base64 内联会让页面渲染进程出现内存尖峰（UTF-16 字符串 +
+  // IPC 结构化克隆），大图偶发时可能直接崩掉标签页/浏览器。超过该体积的 HTTPS
+  // 图片只回传签名地址，由 service worker 凭主机权限抓取；blob:/data: 地址
+  // 无法在页面外恢复，仍必须内联。
+  const INLINE_IMAGE_BYTES = 4 * 1024 * 1024;
+  const yieldToEventLoop = () => new Promise(resolve => setTimeout(resolve, 0));
+
+  // ---------------------------------------------------------------------------
+  // Unwatermarked-original bridge (isolated side).
+  // The Dola provider installs a MAIN-world observer that forwards
+  // { raw: image_ori_raw.url, aliases: [every rendered variant URL] } pairs.
+  // Keys combine an exact origin+path match with Dola's own media identifiers
+  // (rc_gen_image segment, 32-hex hash, last path segment) so the visible
+  // <img src> resolves to the raw original even when query/size params differ.
+  // ---------------------------------------------------------------------------
   const rawImageUrls = new Map();
   const rawImageIdentifiers = new Map();
-  const rawUrlKeys = value => {
+  const dolaUrlKeys = value => {
+    const keys = [];
+    try {
+      const text = String(value || '');
+      const url = new URL(text, globalThis.location?.href);
+      const base = `${url.origin}${url.pathname}`;
+      keys.push(`${base}${url.search}`);
+      if (url.search) keys.push(base);
+      const rc = text.match(/rc_gen_image\/([^?~]+)/i);
+      if (rc?.[1]) keys.push(decodeURIComponent(rc[1]));
+      const hex = text.match(/([0-9a-f]{32})/i);
+      if (hex) keys.push(hex[1].toLowerCase());
+      const segments = url.pathname.split('/').filter(Boolean);
+      if (segments.length) {
+        const last = segments[segments.length - 1].split('~')[0];
+        if (last.length > 8) keys.push(last);
+        const noExt = last.replace(/\.(?:png|jpe?g|webp|avif|mp4|mov|m4v|m3u8)$/i, '');
+        if (noExt.length > 8 && noExt !== last) keys.push(noExt);
+      }
+    } catch {}
+    return [...new Set(keys)];
+  };
+  const dolaUrlIdentifiers = value => {
+    const result = [];
     try {
       const url = new URL(String(value || ''), globalThis.location?.href);
-      const base = `${url.origin}${url.pathname}`;
-      const exact = `${base}${url.search}`;
-      return exact === base ? [base] : [exact, base];
-    } catch { return []; }
+      for (const key of ['image_id', 'imageId', 'creation_id', 'creationId', 'id']) {
+        const id = String(url.searchParams.get(key) || '').trim();
+        if (id.length >= 8 && !result.includes(id)) result.push(id);
+      }
+      for (const part of url.pathname.split('/')) {
+        const id = decodeURIComponent(part).trim();
+        if (id.length >= 16 && /^[\w.-]+$/.test(id) && !result.includes(id)) result.push(id);
+      }
+    } catch {}
+    return result;
   };
-  const rawUrlKey = value => rawUrlKeys(value)[0] || '';
-  const rawUrlIdentifiers = value => { try { const url = new URL(String(value || ''), globalThis.location?.href); const result=[]; for(const key of ['image_id','imageId','creation_id','creationId','id']){const id=String(url.searchParams.get(key)||'').trim();if(id.length>=8&&!result.includes(id))result.push(id);} for(const part of url.pathname.split('/')){const id=decodeURIComponent(part).trim();if(id.length>=16&&/^[\w.-]+$/.test(id)&&!result.includes(id))result.push(id);} return result; } catch { return []; } };
   function rememberRaw(map, key, raw) {
     if (!key || !raw) return;
     const values = map.get(key) || new Set();
@@ -30,11 +81,11 @@
     return entries.length === 1 ? String(entries[0] || '') : '';
   }
   function rawForAlias(taskId, alias) {
-    for (const key of rawUrlKeys(alias)) {
+    for (const key of dolaUrlKeys(alias)) {
       const raw = uniqueRaw(rawImageUrls, `${taskId}|${key}`);
       if (raw) return raw;
     }
-    for (const id of rawUrlIdentifiers(alias)) {
+    for (const id of dolaUrlIdentifiers(alias)) {
       const raw = uniqueRaw(rawImageIdentifiers, `${taskId}|${id}`);
       if (raw) return raw;
     }
@@ -44,38 +95,37 @@
     if (!record || !record.rawBridgeToken || data?.bridgeToken !== record.rawBridgeToken || String(data?.taskId || '') !== record.taskId || !Array.isArray(data.pairs)) return false;
     let accepted = false;
     for (const pair of data.pairs.slice(0, 80)) {
-      const raw = String(pair?.raw || ''), aliases = Array.isArray(pair?.aliases) ? pair.aliases : [pair?.preview];
+      const raw = String(pair?.raw || '');
+      const aliases = Array.isArray(pair?.aliases) ? pair.aliases : [pair?.preview];
       if (raw.length > 2_000 || !/^https:\/\//i.test(raw)) continue;
       const allAliases = [...aliases, raw];
-      for(const value of allAliases.slice(0,12)){const alias=String(value||'');if(alias.length>2_000||!/^https:\/\//i.test(alias))continue;for(const key of rawUrlKeys(alias)){rememberRaw(rawImageUrls, `${record.taskId}|${key}`, raw);accepted=true;}for(const id of rawUrlIdentifiers(alias))rememberRaw(rawImageIdentifiers, `${record.taskId}|${id}`, raw);}
-      for(const value of (Array.isArray(pair?.identifiers)?pair.identifiers:[]).slice(0,12)){const id=String(value||'').trim();if(id.length>=8&&id.length<=200){rememberRaw(rawImageIdentifiers, `${record.taskId}|${id}`, raw);accepted=true;}}
+      for (const value of allAliases.slice(0, 16)) {
+        const alias = String(value || '');
+        if (alias.length > 2_000 || !/^https:\/\//i.test(alias)) continue;
+        for (const key of dolaUrlKeys(alias)) { rememberRaw(rawImageUrls, `${record.taskId}|${key}`, raw); accepted = true; }
+        for (const id of dolaUrlIdentifiers(alias)) rememberRaw(rawImageIdentifiers, `${record.taskId}|${id}`, raw);
+      }
+      for (const value of (Array.isArray(pair?.identifiers) ? pair.identifiers : []).slice(0, 12)) {
+        const id = String(value || '').trim();
+        if (id.length >= 8 && id.length <= 200) { rememberRaw(rawImageIdentifiers, `${record.taskId}|${id}`, raw); accepted = true; }
+      }
     }
     return accepted;
   }
   globalThis.addEventListener?.('message', event => {
     const data = event?.data;
-    if (event.source !== globalThis || event.origin !== globalThis.location?.origin || data?.source !== 'quickdraw-doubao-raw-v1') return;
+    if (event.source !== globalThis || event.origin !== globalThis.location?.origin || data?.source !== 'quickdraw-dola-raw-v1') return;
     const record = active.get(String(data.taskId || ''));
     acceptRawBridgeMessage(record, data);
   });
   function requestRawBridgeReplay(taskId, bridgeToken) {
     if (!bridgeToken) return;
-    try { globalThis.postMessage?.({ source: 'quickdraw-doubao-raw-replay-v1', taskId: String(taskId || ''), bridgeToken: String(bridgeToken) }, globalThis.location?.origin || '*'); } catch {}
+    try { globalThis.postMessage?.({ source: 'quickdraw-dola-raw-replay-v1', taskId: String(taskId || ''), bridgeToken: String(bridgeToken) }, globalThis.location?.origin || '*'); } catch {}
   }
-  const HYDRATE_TIMEOUT = 120_000;
-  const UPLOAD_INACTIVITY_TIMEOUT = 180_000;
-  const SEND_TIMEOUT = 60_000;
-  const REPLY_TIMEOUT = 1_200_000;
-  const STABLE_WINDOW = 800;
-  const PROMPT_FILL_ATTEMPTS = 4;
-  const PROMPT_READBACK_TIMEOUT = 1_000;
-  const INCOMPLETE_ATTACHMENT_TIMEOUT = 8_000;
-  // 多张结果图同时 base64 内联会让页面渲染进程出现内存尖峰（UTF-16 字符串 +
-  // IPC 结构化克隆），大图偶发时可能直接崩掉标签页/浏览器。超过该体积的 HTTPS
-  // 图片只回传签名地址，由 service worker 凭主机权限抓取；blob:/data: 地址
-  // 无法在页面外恢复，仍必须内联。
-  const INLINE_IMAGE_BYTES = 4 * 1024 * 1024;
-  const yieldToEventLoop = () => new Promise(resolve => setTimeout(resolve, 0));
+  function clearRawBridge(taskId) {
+    for (const key of rawImageUrls.keys()) if (key.startsWith(`${taskId}|`)) rawImageUrls.delete(key);
+    for (const key of rawImageIdentifiers.keys()) if (key.startsWith(`${taskId}|`)) rawImageIdentifiers.delete(key);
+  }
 
   const visible = element => {
     if (!element || element.isConnected === false || element.hidden || element.disabled || element.getAttribute?.('aria-disabled') === 'true') return false;
@@ -84,7 +134,7 @@
     return !!(element.offsetParent || element.getClientRects?.().length);
   };
 
-  const textOf = element => String(element?.innerText ?? element?.textContent ?? '').replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
+  const textOf = element => String(element?.innerText ?? element?.textContent ?? '').replace(/[\u200b-\u200d\ufeff]/g, '').trim();
 
   const isEditableElement = element => {
     const tag = String(element?.tagName || '').toLowerCase();
@@ -95,7 +145,10 @@
   function composerRoot(input = null) {
     if (!input) return document;
     try {
-      const nearest = input.closest?.('form,[class*="composer" i],[class*="chat-input" i],[class*="input-area" i],[class*="footer" i]');
+      // Dola/Samantha composer: guidance-input-content wraps both the editor
+      // wrapper and the actions toolbar (the editor wrapper itself is only a
+      // sibling of the toolbar, so match the shared parent, not the wrapper).
+      const nearest = input.closest?.('form,[class*="composer" i],[class*="chat-input" i],[class*="input-area" i],[class*="guidance-input-content" i],[class*="guidance-input-surface" i],[class*="footer" i]');
       if (nearest) return nearest;
     } catch {}
     let current = input;
@@ -106,29 +159,10 @@
   }
 
   function extractAssistantText(element) {
-    // Prefer literal Mermaid code so line breaks survive DOM rendering.
-    const codeBlocks = [...(element?.querySelectorAll?.('pre code, pre') || [])];
-    const seenBlocks = new Set();
-    for (const block of codeBlocks) {
-      const target = block.matches?.('code') ? block : (block.querySelector?.('code') || block);
-      if (!target || seenBlocks.has(target)) continue;
-      seenBlocks.add(target);
-      const value = String(target.textContent || '').replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
-      if (/^(?:flowchart|graph)\s+(?:TD|TB|BT|LR|RL)\b|^sequenceDiagram\b|^stateDiagram(?:-v2)?\b|^gantt\b|^classDiagram\b/i.test(value)) {
-        return `\x60\x60\x60mermaid\n${value}\n\x60\x60\x60`;
-      }
-    }
     const copy = element.cloneNode?.(true);
     if (!copy) return '';
-    for (const selector of ['button', 'svg', 'nav', 'details', '[aria-hidden="true"]', '[aria-label*="copy" i]', '[aria-label*="复制"]', '[data-testid*="copy" i]', '[data-testid*="thinking" i]', '[data-testid*="reason" i]', '[class*="thinking" i]', '[class*="reasoning" i]']) {
+    for (const selector of ['button', 'svg', 'nav', 'details', '[aria-hidden="true"]', '[aria-label*="copy" i]', '[aria-label*="复制"]', '[data-testid*="copy" i]', '[class*="thinking" i]', '[class*="reasoning" i]']) {
       copy.querySelectorAll?.(selector).forEach(node => node.remove());
-    }
-    // Detached elements have no rendered innerText. Preserve paragraph and <br>
-    // boundaries explicitly before reading textContent (plain-text Doubao replies).
-    for (const pre of copy.querySelectorAll('pre')) {
-      const code = pre.querySelector('code');
-      const value = String((code || pre).textContent || '').trim();
-      pre.replaceWith(document.createTextNode(`\n\x60\x60\x60mermaid\n${value}\n\x60\x60\x60\n`));
     }
     for (const br of copy.querySelectorAll('br')) br.replaceWith(document.createTextNode('\n'));
     for (const block of copy.querySelectorAll('p,div,li,tr,h1,h2,h3,h4,blockquote')) block.appendChild(document.createTextNode('\n'));
@@ -158,9 +192,7 @@
     try { globalThis.chrome?.runtime?.sendMessage(message).catch?.(() => {}); } catch {}
   }
 
-  function emitPhase(taskId, stage, data = {}) {
-    emit(taskId, 'phase', { stage: String(stage || ''), ...data });
-  }
+  function emitPhase(taskId, stage, data = {}) { emit(taskId, 'phase', { stage: String(stage || ''), ...data }); }
 
   function findInput() {
     const candidates = [];
@@ -177,7 +209,7 @@
       const nested = query(['textarea', 'input', '[contenteditable="true"]', '[role="textbox"]']).filter(element => root === element || !root?.contains || root.contains(element));
       [...nested].reverse().forEach(element => { if (direct(element) || (isEditableElement(element) && !element.querySelector?.('textarea,input,[contenteditable="true"]'))) add(element); });
     };
-    for (const root of query(['[data-testid*="chat-input" i]', '[data-testid*="prompt" i]', '[class*="chat-input" i]', '[class*="editor" i]']).reverse()) addRoot(root);
+    for (const root of query(['[data-testid*="chat-input" i]', '[data-testid*="prompt" i]', '[class*="chat-input" i]', '[class*="editor" i]', '[class*="composer" i]', '[contenteditable="true"]']).reverse()) addRoot(root);
     for (const element of query(['textarea', 'input', '[contenteditable="true"]', '[role="textbox"]']).reverse()) addRoot(element);
     return candidates.filter(element => visible(element) && isEditableElement(element)).at(-1) || null;
   }
@@ -185,7 +217,7 @@
   function authRequiredPage() {
     let pathname = '';
     try { pathname = new URL(String(globalThis.location?.href || '')).pathname.toLowerCase(); } catch {}
-    if (/\/(?:auth|login|log-in|signup|sign-up|registration|passport|account)(?:\/|$)/.test(pathname)) return true;
+    if (/\/(?:auth|login|log-in|signup|sign-up|registration|passport|account|verify|verification)(?:\/|$)/.test(pathname)) return true;
     const password = [...document.querySelectorAll('input[type="password"]')].find(visible);
     const challenge = [...document.querySelectorAll('iframe[src*="challenges.cloudflare.com"],iframe[src*="captcha" i],[data-testid*="challenge" i],[data-testid*="captcha" i]')].find(visible);
     if (challenge) return true;
@@ -226,30 +258,15 @@
       if (blockTags.has(childTag) && output.length > before && !output.endsWith('\n')) append('\n');
     };
     walk(element);
-    const structural = output.replace(/[\u200b\u200c\u200d\ufeff]/g, '');
-    return (structural || String(element.innerText || element.textContent || '').replace(/[\u200b\u200c\u200d\ufeff]/g, '')).trim();
+    const structural = output.replace(/[\u200b-\u200d\ufeff]/g, '');
+    return (structural || String(element.innerText || element.textContent || '').replace(/[\u200b-\u200d\ufeff]/g, '')).trim();
   }
 
   function normalizePromptText(value) {
-    return String(value ?? '').replace(/[\u200b\u200c\u200d\ufeff]/g, '').replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').replace(/[ \t]*\n[ \t]*/g, '\n').replace(/\n+/g, '\n').trim();
+    return String(value ?? '').replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').replace(/[ \t]*\n[ \t]*/g, '\n').replace(/\n+/g, '\n').trim();
   }
-
   function promptSemanticText(value) { return normalizePromptText(value).replace(/\s+/g, ' ').trim(); }
-
-  function promptMatches(actual, expected) {
-    const target = promptSemanticText(expected);
-    return promptSemanticText(actual) === target;
-  }
-
-  // When the composer is in image-generation mode, Doubao prefixes the sent
-  // user bubble with a mode label such as "生成图片：". Request matching must
-  // tolerate that site-injected prefix; editor readback stays strictly equal.
-  function stripBubbleModePrefix(value) {
-    return String(value || '').replace(/^\s*(?:生成图片|生成图像|生成视频|图像生成|图片生成|AI生图|生图)\s*[:：]\s*/, '');
-  }
-  function bubbleMatchesPrompt(actual, expected) {
-    return promptMatches(actual, expected) || promptMatches(stripBubbleModePrefix(actual), expected);
-  }
+  function promptMatches(actual, expected) { return promptSemanticText(actual) === promptSemanticText(expected); }
 
   function inputEvent(type, value) {
     try { return new InputEvent(type, { bubbles: true, cancelable: type === 'beforeinput', inputType: 'insertText', data: value }); }
@@ -302,7 +319,6 @@
       '[data-testid*="submit" i]',
       'button[class*="send" i]',
       'button[class*="submit" i]',
-      'button[data-testid*="chat-input" i][data-testid*="button" i]',
       'button[type="submit"]',
       'button[aria-label*="Send" i]',
       'button[aria-label*="发送"]',
@@ -310,9 +326,6 @@
       'button[title*="发送"]'
     ];
     for (const selector of selectors) {
-      // The send control stays mounted while disabled; an enabled match is
-      // required, otherwise the send-wait gate would resolve before Doubao
-      // accepts input.
       const button = [...document.querySelectorAll(selector)].reverse().find(element => visible(element) && !element.disabled && element.getAttribute?.('aria-disabled') !== 'true');
       if (button) return button;
     }
@@ -323,100 +336,38 @@
     const fallback = [...(root?.querySelectorAll?.('button,[role="button"]') || [])].filter(button => {
       if (!visible(button) || button.disabled || button.getAttribute?.('aria-disabled') === 'true') return false;
       const label = `${button.getAttribute?.('aria-label') || ''} ${button.getAttribute?.('title') || ''} ${button.getAttribute?.('data-icon') || ''} ${button.getAttribute?.('name') || ''} ${textOf(button)} ${button.className || ''} ${button.innerHTML || ''}`.toLowerCase();
-      if (/解释图片|解释图像|explain\s*(image|picture)|attach|upload|image|photo|file|附件|上传|图片|文件|voice|microphone|语音|录音|麦克风/.test(label)) return false;
+      if (/解释图片|解释图像|explain\s*(image|picture)|attach|upload|image|photo|file|附件|上传|图片|文件|voice|microphone|语音|录音|麦克风|视频|音乐/.test(label)) return false;
       return /send|submit|发送|提交|arrow[-_ ]?up|paper[-_ ]?plane|enter/.test(label) || (!textOf(button) && !!button.querySelector?.('svg') && !/plus|add|more|翻译|音乐|视频/.test(label));
     }).at(-1);
     if (fallback) return fallback;
-    // Doubao currently renders the composer send arrow with hashed classes and
-    // an icon-only button. Its stable semantic label is often on a nested
-    // SVG/path rather than the button itself, so inspect the complete local
-    // markup after excluding attachment/voice controls above.
     const semantic = [...(root?.querySelectorAll?.('button,[role="button"]') || [])].filter(button => {
       if (!visible(button) || button.disabled || button.getAttribute?.('aria-disabled') === 'true') return false;
       const markup = `${button.outerHTML || ''} ${button.innerHTML || ''}`.toLowerCase();
       return /arrow[-_ ]?up|paper[-_ ]?plane|send|submit|发送|提交/.test(markup) && !/voice|microphone|语音|录音|attach|upload|附件|上传/.test(markup);
     }).at(-1);
-    if (semantic) return semantic;
-    return null;
+    return semantic || null;
   }
 
-  const DOUBAO_MESSAGE_SELECTORS = [
-    '[data-message-id]',
-    '[data-testid*="message" i]',
-    '[data-testid*="conversation" i]',
-    '[data-testid*="turn" i]',
-    '[class*="message" i]',
-    '[class*="conversation" i]',
-    '[class*="turn" i]'
+  const DOLA_MESSAGE_SELECTORS = [
+    '[data-message-id]', '[data-testid*="message" i]', '[data-testid*="conversation" i]', '[data-testid*="turn" i]',
+    '[class*="message" i]', '[class*="conversation" i]', '[class*="turn" i]', '[class*="chat-item" i]', '[class*="bubble" i]'
   ];
-  const DOUBAO_ASSISTANT_SELECTORS = [
-    '[data-message-author-role="assistant"]',
-    '[data-message-role="assistant"]',
-    '[data-role="assistant"]',
-    '[data-testid*="conversation-turn" i][data-turn="assistant"]',
-    '[data-testid*="assistant" i]',
-    '[class*="assistant" i]',
-    '[class*="bot-message" i]',
-    '[class*="ai-message" i]'
+  const DOLA_ASSISTANT_SELECTORS = [
+    '[data-message-author-role="assistant"]', '[data-message-role="assistant"]', '[data-role="assistant"]',
+    '[data-testid*="assistant" i]', '[class*="assistant" i]', '[class*="bot-message" i]', '[class*="ai-message" i]', '[class*="answer" i]', '[class*="reply" i]'
   ];
-  const DOUBAO_USER_SELECTORS = [
-    '[data-message-author-role="user"]',
-    '[data-message-role="user"]',
-    '[data-role="user"]',
-    '[data-testid*="conversation-turn" i][data-turn="user"]',
-    '[data-testid*="user-message" i]',
-    '[class*="user-message" i]',
-    '[class*="human-message" i]'
+  const DOLA_USER_SELECTORS = [
+    '[data-message-author-role="user"]', '[data-message-role="user"]', '[data-role="user"]',
+    '[data-testid*="user-message" i]', '[class*="user-message" i]', '[class*="human-message" i]', '[class*="question" i]'
   ];
-  // Current Doubao completion phrasings are "已生成 4 张…" / "已为你生成 4
-  // 张…"; keep the old variants and English ones. The "已…生成/为你生成"
-  // family must not match the in-progress "正在生成" indicator.
+  // Doubao/Dola have shipped several completion phrasings: "图片已生成",
+  // "已生成 4 张…", "已为你生成 …". Match the "已…生成/为你生成" family without
+  // matching the in-progress "正在生成" indicator.
   const COMPLETION_TEXT = /已完成图片生成|图片生成完成|图片已生成|生成了图片|已(?:为你|帮你|给你|经)?\s*生成|为你生成|generated\s+(?:\d+\s+)?(?:an?|the|your)?\s*(?:images?|pictures?|artworks?)|(?:images?|pictures?)\s+(?:are|is|have been|has been)\s+(?:generated|ready)/i;
 
   function taskMarkerPattern(taskId) {
     const escaped = String(taskId || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return escaped ? new RegExp(`任务编号\\s*[:：]\\s*${escaped}(?:\\b|[。．.,，、\\s]|$)`) : /任务编号\s*[:：]/;
-  }
-
-  function messageIdOf(element) {
-    if (!element) return '';
-    for (const name of ['data-message-id', 'data-msg-id', 'data-messageid', 'data-conversation-message-id', 'data-testid']) {
-      const value = String(element.getAttribute?.(name) || '').trim();
-      if (value && value.length <= 240 && !/^(?:message|user-message|assistant-message|conversation-turn)$/i.test(value)) return value;
-    }
-    const id = String(element.id || '').trim();
-    return id && id.length <= 240 && /(?:message|conversation|turn|chat)/i.test(id) ? id : '';
-  }
-
-  function attachmentFingerprint(element) {
-    if (!element) return '';
-    const values = [];
-    for (const image of element.querySelectorAll?.('img') || []) {
-      const value = String(image.currentSrc || image.src || image.getAttribute?.('data-src') || '').trim();
-      if (value) values.push(value);
-    }
-    for (const node of element.querySelectorAll?.('[data-asset-id],[data-file-id],[data-image-id],[data-testid*="attachment" i]') || []) {
-      const value = String(node.getAttribute?.('data-asset-id') || node.getAttribute?.('data-file-id') || node.getAttribute?.('data-image-id') || textOf(node) || '').trim();
-      if (value) values.push(value);
-    }
-    return values.length ? hash(values.join('|')) : '';
-  }
-
-  function recordForMessage(element, text = textOf(element)) {
-    const messageId = messageIdOf(element);
-    const fingerprint = hash(text);
-    const attachment = attachmentFingerprint(element);
-    return { element, text, fingerprint, messageId, stableFingerprint: messageId ? `id:${hash(messageId)}` : fingerprint, attachmentFingerprint: attachment };
-  }
-
-  function requestRecord(record = {}) {
-    return {
-      baselineUserElements: record.baselineUserElements,
-      baselineUserKeys: record.baselineUserKeys,
-      requestMessageId: record.requestMessageId,
-      requireFresh: !!record.baselineUserElements,
-      allowLegacyMarker: record.allowLegacyMarker !== false
-    };
   }
 
   function queryAll(selectors, root = document) {
@@ -436,8 +387,8 @@
     const attrs = ['data-message-author-role', 'data-message-role', 'data-role', 'data-author', 'data-sender', 'aria-label', 'aria-roledescription'];
     const value = attrs.map(name => element?.getAttribute?.(name) || '').join(' ').toLowerCase();
     const classes = String(element?.className || '').toLowerCase();
-    if (/(?:^|[\s_-])(user|human|用户)(?:$|[\s_-])/.test(`${value} ${classes}`)) return 'user';
-    if (/(?:^|[\s_-])(assistant|bot|ai|豆包|助手)(?:$|[\s_-])/.test(`${value} ${classes}`)) return 'assistant';
+    if (/(?:^|[\s_-])(user|human|用户|question)(?:$|[\s_-])/.test(`${value} ${classes}`)) return 'user';
+    if (/(?:^|[\s_-])(assistant|bot|ai|dola|助手|answer|reply)(?:$|[\s_-])/.test(`${value} ${classes}`)) return 'assistant';
     return '';
   }
 
@@ -449,12 +400,9 @@
 
   function allTaskTextElements(taskId) {
     const marker = String(taskId || '') ? taskMarkerPattern(taskId) : null;
-    const candidates = queryAll([...DOUBAO_USER_SELECTORS, ...DOUBAO_MESSAGE_SELECTORS]);
+    const candidates = queryAll([...DOLA_USER_SELECTORS, ...DOLA_MESSAGE_SELECTORS]);
     const matching = candidates.filter(element => visible(element) && !isComposerElement(element) && (marker ? marker.test(textOf(element)) : /任务编号\s*[:：]/.test(textOf(element))));
     if (matching.length) return matching;
-    // Doubao message wrappers have changed several times without retaining a
-    // stable role/testid. Fall back to text-bearing nodes only when semantic
-    // message selectors produced no anchor.
     try {
       return [...(document.querySelectorAll?.('body *') || [])].filter(element => visible(element) && !isComposerElement(element) && (marker ? marker.test(textOf(element)) : /任务编号\s*[:：]/.test(textOf(element))));
     } catch { return []; }
@@ -463,9 +411,6 @@
   function chooseTaskAnchor(elements) {
     const values = [...new Set(elements || [])].filter(Boolean);
     if (!values.length) return null;
-    // Prefer a semantic message wrapper. Otherwise use the smallest visible
-    // text node wrapper; it still preserves document order for reply matching
-    // and avoids selecting the entire conversation root.
     values.sort((a, b) => {
       const roleScore = element => roleOf(element) === 'user' ? 0 : (element.hasAttribute?.('data-message-id') ? 1 : 2);
       const score = roleScore(a) - roleScore(b);
@@ -475,48 +420,18 @@
     return values[0] || null;
   }
 
-  function taskRequest(taskId, requestFingerprint = '', requestText = '', options = {}) {
-    if (requestText && typeof requestText === 'object') { options = requestText; requestText = ''; }
-    if (!options || typeof options !== 'object') options = {};
-    const expectedFingerprint = String(requestFingerprint || '');
-    const expectedText = String(requestText || '');
-    const expectedMessageId = String(options.requestMessageId || '');
-    const users = userMessages(expectedText);
-    const baselineElements = options.baselineUserElements instanceof Set ? options.baselineUserElements : null;
-    const baselineKeys = options.baselineUserKeys instanceof Set ? options.baselineUserKeys : null;
-    const isBaseline = message => baselineElements?.has(message.element) || (baselineKeys?.has(message.messageId) && message.messageId);
-    const eligible = users.filter(message => !isBaseline(message));
-    const byMessageId = expectedMessageId && eligible.find(message => message.messageId === expectedMessageId);
-    if (byMessageId) return byMessageId;
-    const byFingerprint = expectedFingerprint && eligible.filter(message => message.fingerprint === expectedFingerprint || message.stableFingerprint === expectedFingerprint);
-    if (byFingerprint?.length === 1) return byFingerprint[0];
-    if (byFingerprint?.length > 1 && !expectedText) return null;
-    if (expectedText) {
-      const byText = eligible.filter(message => bubbleMatchesPrompt(message.text, expectedText));
-      if (byText.length === 1) return byText[0];
-      // A fresh node is sufficient to disambiguate repeated prompt text while
-      // the send operation is active. Once resumed, multiple text-only matches
-      // are intentionally treated as ambiguous.
-      if (byText.length > 1 && baselineElements) {
-        const fresh = byText.filter(message => !baselineElements.has(message.element));
-        if (fresh.length === 1) return fresh[0];
-      }
-      if (byText.length > 1) return null;
+  function taskRequest(taskId, requestFingerprint = '') {
+    const marker = `任务编号：${String(taskId || '')}`;
+    const users = userMessages();
+    const byFingerprint = String(requestFingerprint || '') && users.findLast(message => message.fingerprint === String(requestFingerprint));
+    if (byFingerprint) return byFingerprint;
+    if (requestFingerprint) {
+      const element = chooseTaskAnchor(queryAll(['body *']).filter(element => visible(element) && !isComposerElement(element) && roleOf(element) !== 'assistant' && hash(textOf(element) || element.innerHTML || '') === requestFingerprint));
+      if (element) return { element, text: textOf(element), fingerprint: requestFingerprint };
     }
-    // Empty image prompts are valid when the user supplied only attachments.
-    // In that case the newly observed user node (or its stable ID) is the only
-    // safe association; never synthesize a visible placeholder prompt.
-    if (!expectedText && !expectedFingerprint && baselineElements) {
-      if (eligible.length === 1) return eligible[0];
-      if (eligible.length > 1) return null;
-    }
-    // Keep the marker path only for tasks created before the prompt stopped
-    // carrying a visible task number. New sends always resolve above first.
-    if (options.allowLegacyMarker !== false) {
-      const anchor = chooseTaskAnchor(allTaskTextElements(taskId));
-      if (anchor) return recordForMessage(anchor);
-    }
-    return null;
+    const anchor = chooseTaskAnchor(allTaskTextElements(taskId));
+    if (!anchor) return null;
+    return { element: anchor, text: textOf(anchor), fingerprint: hash(textOf(anchor)) };
   }
 
   function taskIdFromText(text) {
@@ -525,24 +440,7 @@
   }
 
   function isAfter(first, second) {
-    try {
-      const position = first?.compareDocumentPosition?.(second) || 0;
-      return !(position & (1 | 8 | 16)) && !!(position & 4);
-    } catch { return false; }
-  }
-
-  function hasLaterUserRequest(users, request) {
-    return users.some(message => {
-      if (message.element === request.element || message.element.contains?.(request.element) || request.element.contains?.(message.element)) return false;
-      if (message.messageId && message.messageId === request.messageId) return false;
-      return isAfter(request.element, message.element);
-    });
-  }
-
-  function conversationConflict() {
-    const error = new Error('豆包会话中出现了其他请求，已暂停读取；页面已保留，请确认会话后继续或取消任务。');
-    error.code = 'conversation-conflict';
-    return error;
+    try { return !!(first?.compareDocumentPosition && (first.compareDocumentPosition(second) & 4)); } catch { return false; }
   }
 
   function actionCount(element) {
@@ -557,42 +455,26 @@
     const text = textOf(turn?.element || turn);
     if (COMPLETION_TEXT.test(text)) return true;
     if (!candidate) return false;
-    return queryAll(['button', '[role="button"]'], turn?.element || turn).some(control => {
-      const label = `${control.getAttribute?.('aria-label') || ''} ${control.getAttribute?.('title') || ''} ${textOf(control)} ${control.className || ''}`.toLowerCase();
-      return /download|下载|保存图片|复制图片|重新生成|regenerate/.test(label);
+    return queryAll(['button', '[role="button"]', 'a[href]'], turn?.element || turn).some(control => {
+      const label = `${control.getAttribute?.('aria-label') || ''} ${control.getAttribute?.('title') || ''} ${control.getAttribute?.('download') || ''} ${textOf(control)} ${control.className || ''}`.toLowerCase();
+      return /download|下载|保存图片|复制图片|重新生成|regenerate|save|original|原图/.test(label);
     });
   }
 
-  // A finished assistant reply mounts an icon-only action toolbar (class
-  // prefix "message-action-bar-…") as a sibling of the message row; the icons
-  // carry no text/aria labels and download is hidden behind "更多". The user
-  // side time bar shares the layout but is justify-end, so exclude it.
-  function assistantActionBar(element) {
+  // Completed replies mount an icon-only action toolbar next to the message
+  // row (the current design labels none of its icons). Treat a populated,
+  // non-user toolbar beside the result as a completion signal.
+  function resultActionBarPresent(element) {
     let scope = element?.element || element;
     for (let depth = 0; scope && depth < 6; depth += 1, scope = scope.parentElement) {
-      const bars = scope.querySelectorAll?.('[class*="message-action-bar" i],[class*="action-bar" i]');
+      const bars = scope.querySelectorAll?.('[class*="action-bar" i],[class*="actionbar" i],[class*="toolbar" i],[class*="message-tools" i]');
       for (const bar of bars || []) {
         if (!visible(bar) || /justify-end|text-right/.test(String(bar.className || ''))) continue;
         const count = [...bar.querySelectorAll('button,[role="button"]')].filter(visible).length;
-        if (count >= 3) return bar;
+        if (count >= 4) return true;
       }
     }
-    return null;
-  }
-
-  function hasTextCompletionControl(element) {
-    return queryAll(['button', '[role="button"]'], element).some(control => {
-      if (!visible(control)) return false;
-      const label = `${control.getAttribute?.('data-testid') || ''} ${control.getAttribute?.('aria-label') || ''} ${control.getAttribute?.('title') || ''} ${textOf(control)}`;
-      return /copy|复制|good-response|like|dislike|点赞|点踩|重新生成|regenerate/i.test(label);
-    });
-  }
-
-  function latestWholeMessage(messages) {
-    // Generic selectors also match nested message content and individual lines.
-    // Keep the enclosing reply, then choose by DOM order, not selector order.
-    const whole = messages.filter(message => !messages.some(other => other !== message && other.element.contains?.(message.element)));
-    return whole.reduce((latest, message) => !latest || isAfter(latest.element, message.element) ? message : latest, null);
+    return false;
   }
 
   function imageCardFor(image) {
@@ -609,13 +491,10 @@
   function assistantMessages() {
     const result = [];
     const seen = new Set();
-    const selectors = [...DOUBAO_ASSISTANT_SELECTORS, ...DOUBAO_MESSAGE_SELECTORS];
-    for (const element of queryAll(selectors)) {
+    for (const element of queryAll([...DOLA_ASSISTANT_SELECTORS, ...DOLA_MESSAGE_SELECTORS])) {
       if (!visible(element) || seen.has(element) || isComposerElement(element)) continue;
       const role = roleOf(element);
       const raw = textOf(element);
-      // A wrapper containing the task marker is a user request, even when the
-      // site has no explicit role attribute. Keep it out of assistant output.
       if (role === 'user' || /任务编号\s*[:：]/.test(raw)) continue;
       const text = extractAssistantText(element);
       if (!text) continue;
@@ -628,8 +507,7 @@
   function assistantTurns() {
     const result = [];
     const seen = new Set();
-    const selectors = [...DOUBAO_ASSISTANT_SELECTORS, ...DOUBAO_MESSAGE_SELECTORS];
-    for (const element of queryAll(selectors)) {
+    for (const element of queryAll([...DOLA_ASSISTANT_SELECTORS, ...DOLA_MESSAGE_SELECTORS])) {
       if (!visible(element) || seen.has(element) || isComposerElement(element)) continue;
       const role = roleOf(element);
       const raw = textOf(element);
@@ -639,50 +517,22 @@
       if (!text && !hasImage) continue;
       seen.add(element); result.push({ element, text, fingerprint: hash(element.innerHTML || raw) });
     }
-    // The result card visible in Doubao has had no stable role/testid across
-    // builds. Add its image card by semantic completion text/actions, while
-    // retaining the message-selector path for GPT-shaped test fixtures.
     for (const image of queryAll(['img'])) {
       if (!visible(image)) continue;
       const card = imageCardFor(image);
       if (!card || seen.has(card) || isComposerElement(card) || roleOf(card) === 'user') continue;
       const text = textOf(card);
-       if (/任务编号\s*[:：]/.test(text) || !hasCompletionEvidence({ element: card }, imageCandidate({ element: card }))) continue;
+      if (/任务编号\s*[:：]/.test(text) || !hasCompletionEvidence({ element: card }, imageCandidates({ element: card })[0])) continue;
       seen.add(card);
       result.push({ element: card, text: extractAssistantText(card), fingerprint: hash(card.innerHTML || text) });
     }
     return result;
   }
 
-  function imageDownloadUrl(image, previewUrl) {
-    const originalAttributes = ['data-original-url', 'data-original', 'data-download-url', 'data-download', 'data-image-original', 'data-src-original'];
-    let current = image;
-    for (let depth = 0; current && depth < 10; depth++, current = current.parentElement) {
-      for (const name of originalAttributes) {
-        const value = String(current.getAttribute?.(name) || '').trim();
-        if (/^https:\/\//i.test(value) && rawUrlKey(value) !== rawUrlKey(previewUrl)) return value;
-      }
-      const imageCount = current.querySelectorAll?.('img')?.length || 0;
-      const links = [];
-      if (String(current.tagName || '').toLowerCase() === 'a') links.push(current);
-      links.push(...(current.querySelectorAll?.('a[href]') || []));
-      for (const link of links) {
-        if (!link.contains?.(image) && imageCount > 1) continue;
-        const href = String(link.href || link.getAttribute?.('href') || '').trim();
-        const label = `${link.getAttribute?.('aria-label') || ''} ${link.getAttribute?.('title') || ''} ${textOf(link)} ${link.getAttribute?.('download') || ''}`.toLowerCase();
-        if (/^https:\/\//i.test(href) && /(?:原图|原始|original|download|下载)/.test(label) && rawUrlKey(href) !== rawUrlKey(previewUrl)) return href;
-      }
-      // Once an ancestor contains several result images, sibling download
-      // links cannot be assigned safely to this image. Wait for the bridge or
-      // a link inside this image's own card instead of reusing another raw URL.
-      if (imageCount > 1) break;
-    }
-    return '';
-  }
-
-  // While a result streams in, each image renders twice (a small cthumb and a
-  // larger cpreview) and both resolve to the same image_raw original. Collapse
-  // rendered variants of one source image so it is imported a single time.
+  // Resolve every result <img> inside a turn to its unwatermarked raw URL via
+  // the bridge; keep the rendered URL as previewImageUrl for diagnostics.
+  // The same generated image renders twice (a small cthumb and a larger
+  // cpreview); collapse both to one stable source id so it is imported once.
   function imageSourceKey(value) {
     const url = String(value || '');
     const genId = url.match(/\/(?:rc_gen_image|creations?|gen_image)\/([a-z0-9]{12,})/i);
@@ -701,12 +551,12 @@
       const key = candidate?.rawImageUrl ? imageSourceKey(candidate.rawImageUrl) : imageSourceKey(candidate?.previewImageUrl);
       const existing = groups.get(key);
       if (!existing) { groups.set(key, candidate); continue; }
-      const score = item => Number(item.width || 0) + (item.rawImageUrl ? 1 : 0);
-      if (score(candidate) > score(existing)) groups.set(key, candidate);
+      const candidateScore = Number(candidate.width || 0) + (candidate.rawImageUrl ? 1 : 0);
+      const existingScore = Number(existing.width || 0) + (existing.rawImageUrl ? 1 : 0);
+      if (candidateScore > existingScore) groups.set(key, candidate);
     }
     return [...groups.values()];
   }
-
   function imageCandidates(turn, record = null) {
     const element = turn?.element || turn;
     const images = String(element?.tagName || '').toLowerCase() === 'img' ? [element] : [...(element?.querySelectorAll?.('img') || [])];
@@ -718,7 +568,7 @@
       const url = String(image.currentSrc || image.src || '').trim();
       if (!url || /^data:image\/svg|^about:blank/i.test(url)) continue;
       const marker = `${image.alt || ''} ${image.getAttribute?.('aria-label') || ''} ${image.className || ''} ${image.closest?.('button')?.getAttribute?.('aria-label') || ''}`.toLowerCase();
-      if (/avatar|profile|logo|icon|favicon|placeholder|thumbnail|thumb|copy|download|user/.test(marker)) continue;
+      if (/avatar|profile|logo|icon|favicon|placeholder|thumbnail|thumb|copy|download|user|emoji|sticker/.test(marker)) continue;
       if (/processing|loading|generating|error|failed|失败|处理中|加载中/.test(marker)) continue;
       const rect = image.getBoundingClientRect?.() || {};
       const width = Number(image.naturalWidth || image.width || rect.width || 0);
@@ -730,48 +580,26 @@
       for (const entry of srcset.split(',')) aliases.push(entry.trim().split(/\s+/)[0] || '');
       let raw = '';
       if (record?.taskId) for (const alias of aliases) { raw = rawForAlias(record.taskId, alias); if (raw) break; }
-      if (!raw) raw = imageDownloadUrl(image, url);
       result.push({ image, imageUrl: raw || url, previewImageUrl: url, rawImageUrl: raw, width, height, fingerprint: hash(`${raw || url}|${width}|${height}`) });
     }
     return result;
   }
-
-  function imageCandidate(turn, record = null) {
-    return imageCandidates(turn, record)[0] || null;
-  }
-
-  function findTaskRequest(record = {}) {
-    return taskRequest(
-      record.taskId,
-      record.requestFingerprint,
-      record.requestText,
-      { ...requestRecord(record), requestMessageId: record.requestMessageId }
-    );
-  }
-
-  function requestFingerprintFor(message) {
-    return String(message?.stableFingerprint || message?.fingerprint || '');
-  }
-
-  function documentOrder(first, second) {
-    if (first === second) return 0;
-    try {
-      const position = first?.compareDocumentPosition?.(second) || 0;
-      if (position & 4) return -1;
-      if (position & 2) return 1;
-    } catch {}
-    return 0;
-  }
+  function imageCandidate(turn, record = null) { return imageCandidates(turn, record)[0] || null; }
 
   function findImageReply(record) {
-    const users = userMessages(record.requestText || '');
-    const request = findTaskRequest(record);
+    const users = userMessages();
+    const request = taskRequest(record.taskId, record.requestFingerprint) || users.findLast(message => message.fingerprint === record.requestFingerprint || message.text.includes(`任务编号：${record.taskId}`));
     if (!request) return null;
-    if (hasLaterUserRequest(users, request)) throw conversationConflict();
+    const laterTask = users.findLast(message => {
+      const candidateTask = taskIdFromText(message.text);
+      return candidateTask && candidateTask !== String(record.taskId) && isAfter(request.element, message.element);
+    });
+    if (laterTask) throw new Error('Dola会话中出现了其他请求，已停止监听，避免取错回复。');
     const turns = assistantTurns().filter(message => {
       if (record.baselineElements?.has(message.element) && record.baselineTurnFingerprints?.get?.(message.element) === message.fingerprint) return false;
-      return isAfter(request.element, message.element);
-    }).sort((a, b) => documentOrder(a.element, b.element));
+      if (!request.element?.compareDocumentPosition) return true;
+      return !!(request.element.compareDocumentPosition(message.element) & 4);
+    });
     const candidates = [];
     const seenImages = new Set();
     const seenResults = new Set();
@@ -792,10 +620,12 @@
     const deduped = dedupeImageCandidates(candidates);
     candidates.length = 0;
     candidates.push(...deduped);
-    const fingerprint = hash(candidates.map(candidate => candidate.fingerprint).join('|'));
+    const fingerprint = hash(candidates.map(item => item.fingerprint).join('|'));
     return { ...representative, candidate: candidates[0], candidates, fingerprint };
   }
 
+  // Page-side decode is best-effort. Cross-origin HTTPS originals that cannot be
+  // read in-page fall back to the worker, which fetches them with host rights.
   async function fetchCandidateBlob(candidate) {
     const url = String(candidate?.imageUrl || '');
     if (!url || /^https?:/i.test(url) || /^blob:|^data:/i.test(url)) {
@@ -820,16 +650,14 @@
     if (!type) return '';
     let binary = '';
     try {
-      for (let offset = 0; offset < bytes.length; offset += 32 * 1024) {
-        binary += String.fromCharCode(...bytes.subarray(offset, offset + 32 * 1024));
-      }
+      for (let offset = 0; offset < bytes.length; offset += 32 * 1024) binary += String.fromCharCode(...bytes.subarray(offset, offset + 32 * 1024));
       return `data:${type};base64,${btoa(binary)}`;
     } catch { return ''; }
     finally { binary = ''; }
   }
 
   async function dataUrlToBlob(value) {
-    const match = String(value || '').match(/^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]*={0,2})$/i);
+    const match = String(value || '').match(/^data:(image\/(?:png|jpe?g|webp|gif));base64,([A-Za-z0-9+/]*={0,2})$/i);
     if (!match) return null;
     const binary = atob(match[2]);
     if (!binary.length || binary.length > 12 * 1024 * 1024) return null;
@@ -838,48 +666,37 @@
     return new Blob([bytes], { type: match[1].toLowerCase() });
   }
 
-  function userMessageContext(element) {
-    let withId = null;
-    for (let current = element, depth = 0; current && current !== document.body && depth < 12; current = current.parentElement, depth++) {
-      if (!withId && messageIdOf(current)) withId = current;
-      const role = roleOf(current);
-      if (role) return { element: current, role };
-    }
-    return { element: withId || element, role: '' };
-  }
-
-  function userMessages(expectedText = '') {
+  function userMessages(expectedText = null) {
     const result = [];
     const seen = new Set();
-    for (const candidate of queryAll([...DOUBAO_USER_SELECTORS, ...DOUBAO_MESSAGE_SELECTORS])) {
-      const { element, role } = userMessageContext(candidate);
+    for (const element of queryAll([...DOLA_USER_SELECTORS, ...DOLA_MESSAGE_SELECTORS])) {
       if (!visible(element) || seen.has(element) || isComposerElement(element)) continue;
-      if (role === 'assistant') continue;
+      const role = roleOf(element);
       const text = textOf(element);
-      const hasAttachment = !!(element.querySelector?.('img,[data-asset-id],[data-file-id],[data-image-id],[data-testid*="attachment" i]'));
-      const matchesExpected = String(expectedText || '') && text && bubbleMatchesPrompt(text, expectedText);
-      if ((!text && !hasAttachment) || (role !== 'user' && !/任务编号\s*[:：]/.test(text) && !matchesExpected)) continue;
-      // With hashed Doubao wrappers, nested selectors can report the same
-      // user bubble several times. Keep the most specific task/message node.
+      if ((!text && !element.querySelector?.('img')) || (role !== 'user' && !/任务编号\s*[:：]/.test(text) && !(expectedText && promptMatches(text, expectedText)))) continue;
       if (result.some(item => item.element !== element && (item.element.contains?.(element) || element.contains?.(item.element)))) continue;
-      seen.add(element); result.push(recordForMessage(element, text));
+      seen.add(element); result.push({ element, text, fingerprint: hash(text || element.innerHTML || '') });
     }
-    for (const candidate of allTaskTextElements('')) {
-      const { element, role } = userMessageContext(candidate);
-      if (role === 'assistant') continue;
+    for (const element of allTaskTextElements('')) {
       if (!visible(element) || seen.has(element)) continue;
       const text = textOf(element);
       if (!text || !/任务编号\s*[:：]/.test(text)) continue;
       if (result.some(item => item.element !== element && (item.element.contains?.(element) || element.contains?.(item.element)))) continue;
-      seen.add(element); result.push(recordForMessage(element, text));
+      seen.add(element); result.push({ element, text, fingerprint: hash(text) });
+    }
+    if (expectedText) {
+      for (const element of queryAll(['body *'])) {
+        if (!visible(element) || seen.has(element) || isComposerElement(element) || roleOf(element) === 'assistant' || !promptMatches(textOf(element), expectedText)) continue;
+        if (result.some(item => item.element.contains?.(element) || element.contains?.(item.element))) continue;
+        seen.add(element); result.push({ element, text: textOf(element), fingerprint: hash(textOf(element)) });
+      }
     }
     return result;
   }
 
-  // Current Doubao shows no stop button or [data-state=loading] during image
-  // generation; the only in-progress signal is a short streaming status leaf
-  // such as "正在生成图片" (with a sweep animation). Detect it so sawBusy is
-  // set and completion cannot fire while the result is still streaming in.
+  // The Samantha/Dola composer has no stop button or [data-state=loading]
+  // while an image is produced; the only in-progress signal is a short
+  // streaming status such as "正在生成图片" / "Generating image".
   function streamingBusyText(root = document) {
     try {
       const leaves = root.querySelectorAll?.('div,span,p');
@@ -895,12 +712,7 @@
   }
 
   function generationBusy() {
-    const selectors = [
-      '[data-testid*="stop"]',
-      'button[aria-label*="Stop" i]',
-      'button[aria-label*="停止"]',
-      '[data-state="loading"]'
-    ];
+    const selectors = ['[data-testid*="stop"]', 'button[aria-label*="Stop" i]', 'button[aria-label*="停止"]', '[data-state="loading"]', '[class*="loading" i][class*="generate" i]'];
     if (selectors.some(selector => [...document.querySelectorAll(selector)].some(visible))) return true;
     return !!streamingBusyText();
   }
@@ -926,24 +738,9 @@
     clearTimeout(record.timeout);
     clearTimeout(record.stabilityTimer);
     clearTimeout(record.pollTimer);
-    if (record.rawBridgeToken) globalThis.postMessage?.({ source: 'quickdraw-doubao-raw-cleanup-v1', taskId, bridgeToken: record.rawBridgeToken }, globalThis.location?.origin || '*');
-    for (const key of rawImageUrls.keys()) if (key.startsWith(`${taskId}|`)) rawImageUrls.delete(key);
-    for (const key of rawImageIdentifiers.keys()) if (key.startsWith(`${taskId}|`)) rawImageIdentifiers.delete(key);
     active.delete(taskId);
-  }
-
-  function findReply(record) {
-    const messages = assistantMessages();
-    const users = userMessages(record.requestText || '');
-    const request = findTaskRequest(record);
-    if (!request) return null;
-    if (hasLaterUserRequest(users, request)) throw conversationConflict();
-    const fresh = messages.filter(message => {
-      if (record.baselineElements?.has(message.element)) return false;
-      return isAfter(request.element, message.element);
-    });
-    if (!fresh.length) return null;
-    return latestWholeMessage(fresh);
+    try { if (record.rawBridgeToken) globalThis.postMessage?.({ source: 'quickdraw-dola-raw-cleanup-v1', taskId: String(taskId), bridgeToken: record.rawBridgeToken }, globalThis.location?.origin || '*'); } catch {}
+    clearRawBridge(taskId);
   }
 
   function watchReply(record) {
@@ -951,44 +748,12 @@
     record.stage = 'generating';
     if (record.phaseEvents) emitPhase(taskId, 'generating', { progress: 0 });
     const startedAt = Date.now();
-    let last = '';
-    let lastChangedAt = 0;
     let scheduled = false;
     const schedule = delay => {
       if (scheduled || !active.has(taskId)) return;
       scheduled = true;
-      record.pollTimer = setTimeout(() => { scheduled = false; record.pollTimer = null; check(); }, delay);
+      record.pollTimer = setTimeout(() => { scheduled = false; record.pollTimer = null; checkImage(); }, delay);
     };
-    const check = () => {
-      if (!active.has(taskId)) return;
-      if (record.mode === 'image-edit') { checkImage(); return; }
-      let message;
-      try { message = findReply(record); }
-      catch (error) { dispose(taskId); emit(taskId, 'needs-attention', { code: error.code || '', error: error.message }); return; }
-      const reply = message?.text || '';
-      const busy = generationBusy();
-      if (busy) record.sawBusy = true;
-      if (reply && reply !== last) { last = reply; lastChangedAt = Date.now(); }
-      const stableFor = lastChangedAt ? Date.now() - lastChangedAt : 0;
-      const turn = message?.element.closest?.('article,[data-testid^="conversation-turn"],[data-message-id],[class*="message" i]') || message?.element;
-      const completedControl = turn?.querySelector?.('button[data-testid="copy-turn-action-button"],button[data-testid="good-response-turn-action-button"],button[aria-label="Copy response"],button[aria-label="复制回复"]');
-      const ended = visible(completedControl) || hasTextCompletionControl(turn) || hasCompletionEvidence({ element: turn }, null) || (record.sawBusy && !!findSendButton());
-      if (message && reply && stableFor >= STABLE_WINDOW && !busy && ended) {
-        if (record.phaseEvents) emitPhase(taskId, 'returning', { progress: 0 });
-        dispose(taskId);
-        emit(taskId, 'reply', { text: reply, phase: 'complete', fingerprint: message.fingerprint });
-        return;
-      }
-      if (Date.now() - startedAt >= REPLY_TIMEOUT || (record.deadlineAt && Date.now() >= record.deadlineAt)) {
-        dispose(taskId);
-        emit(taskId, 'needs-attention', { code: 'reply-timeout', error: '豆包回复超时，未自动重发。' });
-        return;
-      }
-      schedule(generationBusy() ? 450 : 700);
-    };
-    schedule(350);
-    record.observer = new MutationObserver(() => schedule(180));
-    if (document.body) record.observer.observe(document.body, { subtree: true, childList: true, characterData: true });
 
     async function checkImage() {
       if (!active.has(taskId) || record.returning) return;
@@ -996,32 +761,26 @@
       try { message = findImageReply(record); }
       catch (error) { dispose(taskId); emit(taskId, 'needs-attention', { code: error.code || '', error: error.message }); return; }
       const candidates = Array.isArray(message?.candidates) ? message.candidates : (message?.candidate ? [message.candidate] : []);
-      const candidate = candidates[0] || null;
       const busy = generationBusy();
       if (busy) record.sawBusy = true;
       const key = message?.fingerprint || (candidates.length ? hash(candidates.map(item => item.fingerprint).join('|')) : '');
       if (key && key !== record.lastImageKey) { record.lastImageKey = key; record.lastImageChangedAt = Date.now(); }
       const stableFor = record.lastImageChangedAt ? Date.now() - record.lastImageChangedAt : 0;
-      const turn = message?.element.closest?.('article,[data-testid^="conversation-turn"],[data-message-id],[class*="message" i]') || message?.element;
-      // Anchor toolbar detection at the assistant row itself so a previous
-      // turn's completed toolbar cannot finish the current turn early.
-      const actionBar = assistantActionBar(message?.element || turn);
-      const ended = hasCompletionEvidence({ element: turn }, candidate)
-        || candidates.some(item => hasCompletionEvidence({ element: imageCardFor(item.image) }, item))
-        || !!actionBar
-        // Last resort: generation was observed busy, the streaming indicator is
-        // gone and result images are present and stable.
-        || (record.sawBusy && !busy && candidates.length > 0);
-      const missingRaw = record.rawBridgeToken && candidates.some(item => !item.rawImageUrl);
+      const turn = message?.element.closest?.('article,[data-message-id],[class*="message" i],[class*="conversation" i]') || message?.element;
+      const ended = hasCompletionEvidence({ element: turn }, candidates[0]) || candidates.some(item => hasCompletionEvidence({ element: imageCardFor(item.image) }, item)) || resultActionBarPresent(turn) || (record.sawBusy && !busy && candidates.length > 0);
+      // Guarantee the unwatermarked original: if generation finished but the
+      // bridge has not resolved a raw URL yet, wait briefly instead of
+      // importing a watermarked preview.
+      const missingRaw = !!record.rawBridgeToken && candidates.some(item => !item.rawImageUrl);
       if (candidates.length && ended && !busy && missingRaw) {
         if (!record.rawMissingSince) record.rawMissingSince = Date.now();
-        if (Date.now() - record.rawMissingSince >= 10_000) {
+        if (Date.now() - record.rawMissingSince >= RAW_MISSING_GRACE) {
           dispose(taskId);
-          emit(taskId, 'needs-attention', { code: 'raw-image-unavailable', error: '豆包已完成图片生成，但页面没有提供可核验的原图地址。结果标签页已保留，可打开后继续读取。' });
+          emit(taskId, 'needs-attention', { code: 'raw-image-unavailable', error: 'Dola 已完成图片生成，但没有拿到可核验的无水印原图地址。结果标签页已保留，可打开后继续读取。' });
           return;
         }
       } else if (candidates.length && !missingRaw) record.rawMissingSince = 0;
-      if (candidates.length && (!record.rawBridgeToken || !missingRaw) && stableFor >= STABLE_WINDOW && !busy && ended) {
+      if (candidates.length && !missingRaw && stableFor >= STABLE_WINDOW && !busy && ended) {
         record.returning = true;
         if (record.phaseEvents) emitPhase(taskId, 'returning', { progress: 0 });
         const images = [];
@@ -1039,8 +798,6 @@
                 imageDataUrl = await blobToDataUrl(imageBlob);
               }
             } catch (error) {
-              // The worker can fetch the verified HTTPS original if page-side
-              // decoding fails. Blob URLs cannot be recovered outside the page.
               if (!/^https:\/\//i.test(item.imageUrl)) throw error;
             } finally { imageBlob = null; }
             images.push({ imageUrl: item.imageUrl, imageDataUrl, width: item.width, height: item.height, fingerprint: item.fingerprint });
@@ -1050,7 +807,7 @@
         } catch (error) {
           if (!active.has(taskId)) return;
           dispose(taskId);
-          emit(taskId, 'needs-attention', { code: 'image-read-failed', error: String(error?.message || '豆包图片读取失败，请打开结果页后继续。') });
+          emit(taskId, 'needs-attention', { code: 'image-read-failed', error: String(error?.message || 'Dola 图片读取失败，请打开结果页后继续。') });
           return;
         }
         if (!active.has(taskId)) return;
@@ -1060,10 +817,14 @@
         return;
       }
       if (Date.now() - startedAt >= REPLY_TIMEOUT || (record.deadlineAt && Date.now() >= record.deadlineAt)) {
-        dispose(taskId); emit(taskId, 'needs-attention', { code: 'reply-timeout', error: '豆包回复超时，未自动重发。' }); return;
+        dispose(taskId); emit(taskId, 'needs-attention', { code: 'reply-timeout', error: 'Dola 回复超时，未自动重发。' }); return;
       }
       schedule(generationBusy() ? 450 : 700);
     }
+
+    schedule(350);
+    record.observer = new MutationObserver(() => schedule(180));
+    if (document.body) record.observer.observe(document.body, { subtree: true, childList: true, characterData: true });
   }
 
   function findAttachmentInput(anchor = null) {
@@ -1074,6 +835,64 @@
     return candidates.reverse().find(element => element && element.isConnected !== false && !element.disabled) || null;
   }
 
+  // Radix controls ignore a synthetic element.click(): the menu popper opens
+  // empty and never renders its items. Dispatch the full pointer sequence a
+  // real user click produces, falling back to .click() for plain buttons.
+  function realActivate(element) {
+    if (!element) return false;
+    try {
+      element.scrollIntoView?.({ block: 'center', inline: 'center' });
+      const rect = element.getBoundingClientRect?.() || {};
+      const base = {
+        bubbles: true, cancelable: true, composed: true, view: globalThis, button: 0,
+        clientX: rect.x != null ? rect.x + (Number(rect.width) || 0) / 2 : 0,
+        clientY: rect.y != null ? rect.y + (Number(rect.height) || 0) / 2 : 0
+      };
+      const fire = (Type, name, extra = {}) => {
+        try { element.dispatchEvent(new Type(name, { ...base, ...extra })); }
+        catch { try { element.dispatchEvent(new Event(name, { bubbles: true, cancelable: true })); } catch {} }
+      };
+      fire(PointerEvent, 'pointerover', { pointerId: 1 });
+      fire(PointerEvent, 'pointerenter', { pointerId: 1 });
+      fire(PointerEvent, 'pointerdown', { pointerId: 1 });
+      fire(MouseEvent, 'mousedown');
+      try { element.focus?.(); } catch {}
+      fire(PointerEvent, 'pointerup', { pointerId: 1 });
+      fire(MouseEvent, 'mouseup');
+      fire(MouseEvent, 'click');
+      return true;
+    } catch {
+      try { element.click(); return true; } catch { return false; }
+    }
+  }
+
+  // Dola/Samantha mounts its hidden <input type="file"> only after the user
+  // clicks the composer "+" button, which carries no text, aria-label, title
+  // or data-icon. Identify it structurally: an icon-only button (no text),
+  // never the send control, whose glyph is drawn with perpendicular H/V bars
+  // (the plus), falling back to the sole icon-only non-send control.
+  function isSendControl(element) {
+    if (!element) return false;
+    if (element.id === 'flow-end-msg-send') return true;
+    const marker = `${element.className || ''} ${element.outerHTML || ''}`.toLowerCase();
+    return /send-msg-btn|send-button|paper-plane|arrow[-_ ]?up/.test(marker);
+  }
+  function plusGlyphButton(element) {
+    if (!element || element.tagName !== 'BUTTON' || textOf(element)) return false;
+    if (isSendControl(element)) return false;
+    const paths = [...(element.querySelectorAll?.('svg path') || [])];
+    if (!paths.length || !element.querySelector?.('svg')) return false;
+    return paths.some(path => {
+      const d = String(path.getAttribute?.('d') || '');
+      return /H/.test(d) && /V/.test(d);
+    });
+  }
+  function iconOnlyNonSend(element) {
+    if (!element || textOf(element)) return false;
+    if (isSendControl(element)) return false;
+    return !!element.querySelector?.('svg');
+  }
+
   function findAttachmentButton(anchor = null, clicked = new Set()) {
     const root = anchor ? composerRoot(anchor) : document;
     const scoped = [...(root?.querySelectorAll?.('button,[role="button"]') || [])];
@@ -1081,19 +900,49 @@
     const usable = candidates.filter(element => visible(element) && !element.disabled && !clicked.has(element));
     const description = element => `${element.getAttribute?.('aria-label') || ''} ${element.getAttribute?.('title') || ''} ${textOf(element)} ${element.className || ''} ${element.outerHTML || ''}`.toLowerCase();
     return usable.find(element => /attach|upload|add (?:file|photo|image)|image upload|paperclip|附件|上传|添加图片|选择图片|本地图片|文件/.test(description(element)))
-      || usable.find(element => /^\s*\+\s*$/.test(textOf(element)) || /aria-label=["'][^"']*(?:add|plus|更多)[^"']*["']|data-icon=["']plus["']|icon-plus|lucide-plus/.test(description(element)))
+      || usable.find(element => /^\s*\+\s*$/.test(textOf(element)) || /aria-label=["'][^"']*(?:add|plus|more|更多)[^"']*["']|data-icon=["']plus["']|icon-plus|lucide-plus/.test(description(element)))
+      || usable.find(plusGlyphButton)
+      || (() => { const iconOnly = usable.filter(iconOnlyNonSend); return iconOnly.length === 1 ? iconOnly[0] : null; })()
       || null;
   }
 
-  async function openAttachmentInput(anchor, timeout = 10_000) {
-    const clicked = new Set(); const startedAt = Date.now();
-    while (Date.now() - startedAt < timeout) {
-      const input = findAttachmentInput(anchor); if (input) return input;
-      const button = findAttachmentButton(anchor, clicked);
-      if (button) { clicked.add(button); button.click(); }
-      await new Promise(resolve => setTimeout(resolve, 300));
+  // Logged-in Dola (Samantha) hides local upload behind two layers: the "+"
+  // control opens a radix menu whose "上传文件或图片" item only then mounts the
+  // hidden <input type="file">. Some builds mount the input directly, so both
+  // paths are supported.
+  const UPLOAD_MENU_ITEM_TEXT = /上传(?:文件或图片|文件|图片|本地)|选择(?:本地)?(?:文件|图片)|从本地上传|upload\s*(?:file|image)?|attach/i;
+  const NON_UPLOAD_MENU_ITEM = /云盘|网盘|云端|drive|cloud|技能|skill|拍照|拍摄|camera/i;
+  function findOpenUploadMenuItem() {
+    let fallback = null;
+    for (const menu of document.querySelectorAll?.('[role="menu"][data-state="open"],[role="dialog"][data-state="open"]') || []) {
+      if (!visible(menu)) continue;
+      for (const item of menu.querySelectorAll?.('[role="menuitem"],[role="menuitemcheckbox"],button,a,li') || []) {
+        if (!visible(item)) continue;
+        const label = `${item.getAttribute?.('aria-label') || ''} ${textOf(item)} ${item.className || ''}`;
+        if (NON_UPLOAD_MENU_ITEM.test(label)) continue;
+        if (UPLOAD_MENU_ITEM_TEXT.test(label)) return item;
+        if (!fallback && /上传|upload|文件|图片|file|image/i.test(label)) fallback = item;
+      }
     }
-    return null;
+    return fallback;
+  }
+
+  async function openAttachmentInput(anchor, timeout = 10_000) {
+    const clicked = new Set();
+    const menuTried = new Set();
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeout) {
+      const existing = findAttachmentInput(anchor);
+      if (existing) return existing;
+      // An open upload menu takes priority: choose its local-upload item.
+      const menuItem = findOpenUploadMenuItem();
+      if (menuItem && !menuTried.has(menuItem)) { menuTried.add(menuItem); realActivate(menuItem); await new Promise(resolve => setTimeout(resolve, 350)); continue; }
+      // Otherwise reveal the picker by clicking the "+"/attach control.
+      const button = findAttachmentButton(anchor, clicked);
+      if (button) { clicked.add(button); realActivate(button); }
+      await new Promise(resolve => setTimeout(resolve, 350));
+    }
+    return findAttachmentInput(anchor);
   }
 
   function attachmentMarkers(input = null) {
@@ -1116,54 +965,28 @@
   function attachmentPreviewState(image) {
     return `${image?.currentSrc || image?.src || image?.getAttribute?.('src') || ''}|${Number(image?.naturalWidth || 0)}x${Number(image?.naturalHeight || 0)}|${image?.complete === false ? 'loading' : 'complete'}`;
   }
-
   function isLoadedAttachmentPreview(image) {
-    return !!image && image.complete !== false && Number(image.naturalWidth || 0) >= 64 && Number(image.naturalHeight || 0) >= 64 &&
-      !/^data:image\/svg|^about:blank/i.test(String(image.currentSrc || image.src || ''));
+    return !!image && image.complete !== false && Number(image.naturalWidth || 0) > 0 && Number(image.naturalHeight || 0) > 0 && !/^data:image\/svg|^about:blank/i.test(String(image.currentSrc || image.src || ''));
   }
-
-  function findFreshAttachmentPreview(previews, baselinePreviews) {
-    return (previews || []).find(image => !baselinePreviews?.has(image) || baselinePreviews.get(image) !== attachmentPreviewState(image)) || null;
-  }
-
-  function attachmentReadyEvidence(marker, preview, sendReady) {
-    if (!sendReady || (marker && (attachmentIsBusy(marker) || attachmentIsError(marker)))) return false;
-    return !!((marker && attachmentIsComplete(marker)) || isLoadedAttachmentPreview(preview));
-  }
-
-  function attachmentMarkerState(element) {
-    const attrs = ['data-state', 'aria-busy', 'aria-valuenow', 'aria-valuemax', 'role', 'title', 'aria-label'];
-    const values = attrs.map(name => `${name}:${element?.getAttribute?.(name) || ''}`).join('|');
-    return `${values}|class:${element?.className || ''}|text:${textOf(element).slice(0, 300)}`;
-  }
-
   function attachmentProgress(element) {
     const ariaNow = Number(element?.getAttribute?.('aria-valuenow'));
     if (Number.isFinite(ariaNow) && (element?.getAttribute?.('role') === 'progressbar' || element?.getAttribute?.('aria-valuemax'))) return Math.max(0, Math.min(100, ariaNow));
-    const source = [
-      element?.getAttribute?.('aria-valuenow'),
-      element?.getAttribute?.('data-progress'),
-      element?.getAttribute?.('value'),
-      textOf(element)
-    ].filter(Boolean).join(' ');
+    const source = [element?.getAttribute?.('aria-valuenow'), element?.getAttribute?.('data-progress'), element?.getAttribute?.('value'), textOf(element)].filter(Boolean).join(' ');
     const match = source.match(/(?:^|\s|[(:])([0-9]{1,3})(?:\s*%|\s*\/\s*100\b)/);
     if (!match) return null;
     const value = Number(match[1]);
     return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null;
   }
-
   function attachmentIsBusy(element) {
     const progress = attachmentProgress(element);
     if (progress != null && progress < 100) return true;
     const state = `${element?.getAttribute?.('data-state') || ''} ${element?.getAttribute?.('aria-busy') || ''} ${textOf(element)}`.toLowerCase();
     return element?.getAttribute?.('aria-busy') === 'true' || /uploading|processing|loading|上传中|处理中|加载中/.test(state);
   }
-
   function attachmentIsError(element) {
     const state = `${element?.getAttribute?.('data-state') || ''} ${element?.getAttribute?.('aria-label') || ''} ${textOf(element)}`.toLowerCase();
     return /upload[- ]?failed|upload[- ]?error|failed|error|上传失败|上传错误|处理失败/.test(state);
   }
-
   function attachmentIsComplete(element) {
     if (!element) return false;
     if (attachmentIsError(element)) return false;
@@ -1173,9 +996,13 @@
     const state = `${element.getAttribute?.('data-state') || ''} ${element.getAttribute?.('aria-label') || ''} ${textOf(element)}`.toLowerCase();
     return progress === 100 || /uploaded|complete|completed|ready|已上传|完成|就绪/.test(state);
   }
-
-  function uploadHasStalled(lastProgressAt, now = Date.now()) {
-    return now - Number(lastProgressAt || 0) >= UPLOAD_INACTIVITY_TIMEOUT;
+  function attachmentMarkerState(element) {
+    const attrs = ['data-state', 'aria-busy', 'aria-valuenow', 'aria-valuemax', 'role', 'title', 'aria-label'];
+    return `${attrs.map(name => `${name}:${element?.getAttribute?.(name) || ''}`).join('|')}|class:${element?.className || ''}|text:${textOf(element).slice(0, 300)}`;
+  }
+  function attachmentReadyEvidence(marker, preview, sendReady) {
+    if (!sendReady || (marker && (attachmentIsBusy(marker) || attachmentIsError(marker)))) return false;
+    return !!((marker && attachmentIsComplete(marker)) || isLoadedAttachmentPreview(preview));
   }
 
   async function waitForAttachment(taskId, input, baselineMarkers, baselinePreviews = new Map(), expectedCount = 1, options = {}) {
@@ -1198,23 +1025,20 @@
       if ((!previousTarget && targetMarker) || progressAdvanced || busy !== lastBusy) lastActivityAt = Date.now();
       lastBusy = busy;
       if (progressAdvanced) lastProgress = progress;
-      if (progress >= 0 && progress !== emittedProgress) {
-        emittedProgress = progress;
-        emitPhase(taskId, 'uploading', { progress: progress / 100 });
-      }
+      if (progress >= 0 && progress !== emittedProgress) { emittedProgress = progress; emitPhase(taskId, 'uploading', { progress: progress / 100 }); }
       if (targetMarker && attachmentIsError(targetMarker)) return options.details ? { ok: false, code: 'marker-error', ...lastState } : false;
       const previews = attachmentPreviewImages(currentInput);
       const freshPreviews = previews.filter(image => !baselinePreviews.has(image) || baselinePreviews.get(image) !== attachmentPreviewState(image));
       const freshMarkers = markers.filter(element => !baselineMarkers.has(element) || baselineMarkers.get(element) !== attachmentMarkerState(element));
       const sendReady = !!findSendButton();
       const completePreviews = freshPreviews.filter(isLoadedAttachmentPreview).length;
-      const completeMarkers = freshMarkers.filter(attachmentIsComplete).length;
+      const completeMarkers = freshMarkers.filter(attachmentIsComplete).filter(marker => !freshMarkers.some(other => other !== marker && attachmentIsComplete(other) && marker.contains?.(other))).length;
       const busyMarkers = freshMarkers.filter(attachmentIsBusy);
       const errorMarkers = freshMarkers.filter(attachmentIsError);
       const readyCount = Math.max(completePreviews, completeMarkers, expectedCount === 1 && attachmentReadyEvidence(targetMarker, freshPreviews[0], sendReady) ? 1 : 0);
       const inputFileCount = Number(currentInput?.files?.length || 0);
       lastState = { expectedCount, readyCount, previewCount: freshPreviews.length, markerCount: freshMarkers.length, inputFileCount, busy: busyMarkers.length > 0, error: errorMarkers.length > 0 };
-      if (sendReady && readyCount >= expectedCount && !busyMarkers.length && !errorMarkers.length) {
+      if (readyCount >= expectedCount && !busyMarkers.length && !errorMarkers.length) {
         if (!readySince) readySince = Date.now();
         if (Date.now() - readySince >= 800) return options.details ? { ok: true, ...lastState } : true;
         incompleteSince = 0;
@@ -1225,7 +1049,7 @@
           if (Date.now() - incompleteSince >= INCOMPLETE_ATTACHMENT_TIMEOUT) return options.details ? { ok: false, code: 'incomplete', ...lastState } : false;
         } else incompleteSince = 0;
       }
-      if (uploadHasStalled(lastActivityAt)) return options.details ? { ok: false, code: 'stalled', ...lastState } : false;
+      if (Date.now() - lastActivityAt >= UPLOAD_INACTIVITY_TIMEOUT) return options.details ? { ok: false, code: 'stalled', ...lastState } : false;
       await new Promise(resolve => setTimeout(resolve, 350));
     }
     return options.details ? { ok: false, code: 'cancelled', ...lastState } : false;
@@ -1254,10 +1078,6 @@
     } catch { return { ok: false, code: 'dispatch-failed', expectedCount: values.length, readyCount: 0, previewCount: 0, markerCount: 0, inputFileCount: Number(input.files?.length || 0) }; }
   }
 
-  async function attachImages(blobs, taskId = '') { return (await attachImagesDetailed(blobs, taskId)).ok; }
-
-  async function attachImage(blob, taskId = '') { return attachImages(blob ? [blob] : [], taskId); }
-
   async function fillPrompt(taskId, prompt) {
     let attempted = false;
     let observed = '';
@@ -1273,17 +1093,14 @@
         return current && promptMatches(observed, prompt) ? current : false;
       }, PROMPT_READBACK_TIMEOUT);
       if (verified) return { ok: true, input: verified, observed };
-      // Uploads and controlled rich editors can replace the node after the
-      // input event. The next bounded attempt deliberately re-queries it;
-      // attachments are already ready and are never uploaded again here.
       await new Promise(resolve => setTimeout(resolve, 120));
     }
     return { ok: false, code: attempted ? 'readback-mismatch' : 'input-unavailable', attempted, observed };
   }
 
-  async function start(taskId, prompt, mode = 'mindmap', imageDataUrl = '', imageDataUrls = [], rawBridgeToken = '', requestText = '') {
+  async function start(taskId, prompt, mode = 'image-edit', imageDataUrl = '', imageDataUrls = [], rawBridgeToken = '') {
     if (active.size) {
-      emit(taskId, 'needs-attention', { code: 'busy', error: '豆包专用标签页正在处理其他任务。' });
+      emit(taskId, 'needs-attention', { code: 'busy', error: 'Dola 专用标签页正在处理其他任务。' });
       return;
     }
     const reservation = { taskId, mode, stage: 'hydrating', deadlineAt: 0, rawBridgeToken: String(rawBridgeToken || '') };
@@ -1297,16 +1114,16 @@
     if (active.get(taskId) !== reservation) return;
     if (hydrated?.auth) {
       dispose(taskId);
-      emit(taskId, 'needs-attention', { code: 'auth-required', error: '豆包页面需要登录或完成验证，任务已暂停。请完成后点击“继续任务”。' });
+      emit(taskId, 'needs-attention', { code: 'auth-required', error: 'Dola 页面需要登录或完成验证，任务已暂停。请完成后点击“继续任务”。' });
       return;
     }
     const input = hydrated?.input || null;
     if (!input) {
       dispose(taskId);
-      emit(taskId, 'needs-attention', { code: 'not-ready', error: '未找到豆包输入框，请先等待页面加载完成。' });
+      emit(taskId, 'needs-attention', { code: 'not-ready', error: '未找到 Dola 输入框，请先等待页面加载完成。' });
       return;
     }
-    if (generationBusy()) { dispose(taskId); emit(taskId, 'needs-attention', { error: '豆包正在生成其他回复，未发送新需求。' }); return; }
+    if (generationBusy()) { dispose(taskId); emit(taskId, 'needs-attention', { error: 'Dola 正在生成其他结果，未发送新需求。' }); return; }
     const imageValues = mode === 'image-edit' ? (Array.isArray(imageDataUrls) && imageDataUrls.length ? imageDataUrls : (imageDataUrl ? [imageDataUrl] : [])) : [];
     reservation.stage = mode === 'image-edit' && imageValues.length ? 'uploading' : 'sending';
     const imageBlobs = mode === 'image-edit' ? (await Promise.all(imageValues.map(value => dataUrlToBlob(value)))).filter(Boolean) : [];
@@ -1315,21 +1132,18 @@
       if (!upload.ok) {
         dispose(taskId);
         const count = Number(upload.readyCount || 0), expected = Number(upload.expectedCount || imageValues.length || 0);
-        const detail = upload.code === 'incomplete' && expected > 1 ? `豆包只确认了 ${count}/${expected} 张图片同时就绪，未发送需求。` : '图片上传失败或长时间没有可验证进展，未发送需求。';
+        const detail = upload.code === 'incomplete' && expected > 1 ? `Dola 只确认了 ${count}/${expected} 张图片同时就绪，未发送需求。` : '图片上传失败或长时间没有可验证进展，未发送需求。';
         emit(taskId, 'needs-attention', { code: 'image-upload-failed', stage: 'uploading', expectedImageCount: expected, readyImageCount: count, error: detail });
         return;
       }
     }
-    const baseline = mode === 'image-edit' ? assistantTurns() : assistantMessages();
+    const baseline = assistantTurns();
     const baselineHashes = baseline.map(message => message.fingerprint);
     const baselineElements = new Set(baseline.map(message => message.element));
-    const baselineUsers = userMessages();
+    const baselineUsers = userMessages(prompt);
     const baselineUserElements = new Set(baselineUsers.map(message => message.element));
-    const baselineUserHashes = new Set(baselineUsers.map(message => message.fingerprint));
     const baselineTurnFingerprints = new Map(baseline.map(message => [message.element, message.fingerprint]));
-    const baselineUserKeys = new Set(baselineUsers.map(message => message.messageId).filter(Boolean));
-    const sentRequestText = String(requestText || prompt || '');
-    const record = { taskId, mode, stage: 'sending', phaseEvents: true, rawBridgeToken: String(rawBridgeToken || ''), requestText: sentRequestText, requestMessageId: '', allowLegacyMarker: false, baselineHashes, baselineElements, baselineTurnFingerprints, baselineUserElements, baselineUserHashes, baselineUserKeys, observer: null, timeout: null, pollTimer: null, stabilityTimer: null, sawBusy: false, lastImageKey: '', lastImageChangedAt: 0 };
+    const record = { taskId, mode, stage: 'sending', phaseEvents: true, rawBridgeToken: String(rawBridgeToken || ''), baselineHashes, baselineElements, baselineTurnFingerprints, baselineUserElements, observer: null, timeout: null, pollTimer: null, stabilityTimer: null, sawBusy: false, lastImageKey: '', lastImageChangedAt: 0, rawMissingSince: 0, returning: false };
     active.set(taskId, record);
     requestRawBridgeReplay(taskId, record.rawBridgeToken);
     emit(taskId, 'ready');
@@ -1338,7 +1152,7 @@
     if (active.get(taskId) !== record) return;
     if (!filled.ok) {
       dispose(taskId);
-      const error = filled.code === 'input-unavailable' ? '未找到可用的豆包编辑器，未写入或发送内容。' : '豆包编辑器写入后完整需求回读校验未通过，未发送内容。';
+      const error = filled.code === 'input-unavailable' ? '未找到可用的 Dola 编辑器，未写入或发送内容。' : 'Dola 编辑器写入后完整需求回读校验未通过，未发送内容。';
       emit(taskId, 'needs-attention', { code: filled.code === 'input-unavailable' ? 'prompt-input-unavailable' : 'prompt-readback-failed', stage: 'sending', error });
       return;
     }
@@ -1346,86 +1160,82 @@
     if (active.get(taskId) !== record) return;
     if (!send) {
       dispose(taskId);
-      emit(taskId, 'needs-attention', { code: 'send-control-not-found', error: '未找到豆包发送控件，未发送内容。' });
+      emit(taskId, 'needs-attention', { code: 'send-control-not-found', error: '未找到 Dola 发送控件，未发送内容。' });
       return;
     }
-    send.click();
+    realActivate(send);
     const confirmedMessage = await waitUntil(() => {
       if (generationBusy()) record.sawBusy = true;
-      return findTaskRequest(record);
+      return userMessages(prompt).find(message => !record.baselineUserElements.has(message.element) && (prompt.trim() ? promptMatches(message.text, prompt) : !!message.element.querySelector?.('img'))) || null;
     }, SEND_TIMEOUT);
     if (active.get(taskId) !== record) return;
     if (!confirmedMessage) {
       dispose(taskId);
-      emit(taskId, 'needs-attention', { code: 'send-uncertain', error: '无法确认豆包是否已发送，未自动重试。' });
+      emit(taskId, 'needs-attention', { code: 'send-uncertain', error: '无法确认 Dola 是否已发送，未自动重试。' });
       return;
     }
-    record.baselineHashes = baselineHashes;
-    record.requestFingerprint = requestFingerprintFor(confirmedMessage);
-    record.requestMessageId = String(confirmedMessage?.messageId || '');
+    record.requestFingerprint = confirmedMessage?.fingerprint || '';
     record.stage = 'generating';
-    emit(taskId, 'send-confirmed', { baselineHashes, requestFingerprint: record.requestFingerprint, requestMessageId: record.requestMessageId });
-    if (mode !== 'image-edit') { dispose(taskId); return; }
+    emit(taskId, 'send-confirmed', { baselineHashes, requestFingerprint: record.requestFingerprint });
     watchReply(record);
   }
 
   async function resumeSending(record) {
-    const found = await waitUntil(() => {
-      return findTaskRequest(record);
-    }, Math.max(1_000, Math.min(SEND_TIMEOUT, Number(record.deadlineAt || 0) - Date.now())));
+    const found = await waitUntil(() => taskRequest(record.taskId, record.requestFingerprint), Math.max(1_000, Math.min(SEND_TIMEOUT, Number(record.deadlineAt || 0) - Date.now())));
     if (!active.has(record.taskId)) return;
     if (!found) {
       dispose(record.taskId);
-      emit(record.taskId, 'needs-attention', { code: 'send-uncertain', error: '恢复后无法确认豆包是否已发送，未自动重试。' });
+      emit(record.taskId, 'needs-attention', { code: 'send-uncertain', error: '恢复后无法确认 Dola 是否已发送，未自动重试。' });
       return;
     }
-    record.requestFingerprint = requestFingerprintFor(found);
-    record.requestMessageId = String(found.messageId || record.requestMessageId || '');
+    record.requestFingerprint = found.fingerprint;
     emitPhase(record.taskId, 'sending', { progress: 1 });
-    emit(record.taskId, 'send-confirmed', { baselineHashes: record.baselineHashes || [], requestFingerprint: record.requestFingerprint, requestMessageId: record.requestMessageId });
-    if (record.mode !== 'image-edit') { dispose(record.taskId); return; }
+    emit(record.taskId, 'send-confirmed', { baselineHashes: record.baselineHashes || [], requestFingerprint: record.requestFingerprint });
     watchReply(record);
   }
 
-  function resume(taskId, baselineHashes, requestFingerprint, deadlineAt, mode = 'mindmap', stage = 'generating', rawBridgeToken = '', requestText = '', requestMessageId = '') {
+  function resume(taskId, baselineHashes, requestFingerprint, deadlineAt, mode = 'image-edit', stage = 'generating', rawBridgeToken = '') {
     if (active.has(taskId)) return;
     if (active.size) throw new Error('无法确认原请求，未自动重发。');
     if (stage !== 'sending' && !requestFingerprint) throw new Error('无法确认原请求，未自动重发。');
-    const record = { taskId, mode, phaseEvents: true, stage, rawBridgeToken: String(rawBridgeToken || ''), requestText: String(requestText || ''), requestMessageId: String(requestMessageId || ''), allowLegacyMarker: true, requestFingerprint: String(requestFingerprint || ''), deadlineAt, baselineHashes: Array.isArray(baselineHashes) ? baselineHashes : [], baselineElements: new Set(), baselineUserElements: null, baselineUserKeys: null, observer: null, timeout: null, pollTimer: null, stabilityTimer: null, sawBusy: false, lastImageKey: '', lastImageChangedAt: 0 };
+    const record = { taskId, mode, phaseEvents: true, stage, rawBridgeToken: String(rawBridgeToken || ''), requestFingerprint: String(requestFingerprint || ''), deadlineAt, baselineHashes: Array.isArray(baselineHashes) ? baselineHashes : [], baselineElements: new Set(), baselineTurnFingerprints: new Map(), observer: null, timeout: null, pollTimer: null, stabilityTimer: null, sawBusy: false, lastImageKey: '', lastImageChangedAt: 0, rawMissingSince: 0, returning: false };
     active.set(taskId, record);
     requestRawBridgeReplay(taskId, record.rawBridgeToken);
     emit(taskId, 'resumed');
     const resumeStage = ['sending', 'generating', 'returning'].includes(stage) ? stage : 'generating';
     emitPhase(taskId, resumeStage, { progress: 0 });
-    if (stage === 'sending') resumeSending(record).catch(error => { dispose(taskId); emit(taskId, 'needs-attention', { code: 'content-error', error: String(error?.message || '豆包页面恢复失败。') }); });
+    if (stage === 'sending') resumeSending(record).catch(error => { dispose(taskId); emit(taskId, 'needs-attention', { code: 'content-error', error: String(error?.message || 'Dola 页面恢复失败。') }); });
     else watchReply(record);
   }
 
-  function probeTask(taskId, mode = 'mindmap', renewUntil = 0, baselineHashes = [], requestFingerprint = '', requestText = '', requestMessageId = '') {
+  function probeTask(taskId, mode = 'image-edit', renewUntil = 0, baselineHashes = [], requestFingerprint = '') {
     const record = active.get(taskId);
     if (record) {
       if (Number(renewUntil) > Date.now()) record.deadlineAt = Number(renewUntil);
-      return { active: true, stage: record.stage || 'generating', requestFound: !!(record.requestFingerprint || record.requestMessageId), requestFingerprint: record.requestFingerprint || '', requestMessageId: record.requestMessageId || '' };
+      return { active: true, stage: record.stage || 'generating', requestFound: !!record.requestFingerprint, requestFingerprint: record.requestFingerprint || '' };
     }
-    const request = findTaskRequest({ taskId, mode, requestFingerprint: String(requestFingerprint || ''), requestText: String(requestText || ''), requestMessageId: String(requestMessageId || ''), baselineUserElements: null, baselineUserKeys: null });
+    const users = userMessages();
+    const request = taskRequest(taskId, requestFingerprint) || users.findLast(message => message.fingerprint === String(requestFingerprint || '') || message.text.includes(`任务编号：${taskId}`));
     if (!request) return { active: false, requestFound: false, busy: generationBusy() };
     const baseline = new Set(Array.isArray(baselineHashes) ? baselineHashes.map(String) : []);
-    const fresh = (mode === 'image-edit' ? assistantTurns() : assistantMessages()).filter(message => {
+    const fresh = assistantTurns().filter(message => {
       if (baseline.has(message.fingerprint)) return false;
-      return isAfter(request.element, message.element);
+      if (!request.element?.compareDocumentPosition) return true;
+      return !!(request.element.compareDocumentPosition(message.element) & 4);
     });
-    const latest = latestWholeMessage(fresh);
-    const candidate = mode === 'image-edit' ? imageCandidate(latest) : null;
+    const latest = fresh.at(-1) || null;
+    const candidates = latest ? imageCandidates(latest) : [];
+    const candidate = candidates[0] || null;
     return {
       active: false, stage: candidate || latest ? 'generating' : 'sending', requestFound: true,
-      requestFingerprint: requestFingerprintFor(request), busy: generationBusy(), hasReply: !!latest,
+      requestFingerprint: request.fingerprint, busy: generationBusy(), hasReply: !!latest,
       replyText: latest?.text || '', replyFingerprint: latest?.fingerprint || '',
-      imageUrl: candidate?.imageUrl || '', imageFingerprint: candidate?.fingerprint || '', requestMessageId: request.messageId || ''
+      imageUrl: candidate?.imageUrl || '', imageFingerprint: candidate?.fingerprint || ''
     };
   }
 
   function handle(message, sender) {
-    if (!message || message.type !== 'qd-ai-doubao-command') return false;
+    if (!message || message.type !== 'qd-ai-dola-command') return false;
     if (!globalThis.chrome?.runtime?.id || sender?.id !== chrome.runtime.id) return false;
     const taskId = String(message.taskId || '');
     if (!taskId) return false;
@@ -1433,15 +1243,15 @@
       const input = findInput();
       return { ok: true, ready: !!input, auth: authRequiredPage() };
     }
-    if (message.action === 'start') { start(taskId, String(message.prompt || ''), message.mode || 'mindmap', String(message.imageDataUrl || ''), Array.isArray(message.imageDataUrls) ? message.imageDataUrls : [], String(message.rawBridgeToken || ''), String(message.requestText ?? message.prompt ?? '')).catch(error => { dispose(taskId); emit(taskId, 'needs-attention', { code: 'content-error', error: String(error?.message || '豆包页面处理失败。') }); }); return true; }
-    if (message.action === 'resume') { try { resume(taskId, message.baselineHashes, message.requestFingerprint, message.deadlineAt, message.mode || 'mindmap', message.stage || 'generating', String(message.rawBridgeToken || ''), String(message.requestText || ''), String(message.requestMessageId || '')); } catch (error) { dispose(taskId); emit(taskId, 'needs-attention', { code: 'content-error', error: String(error?.message || '豆包页面恢复失败。') }); } return true; }
-    if (message.action === 'probe') return { ok: true, state: probeTask(taskId, message.mode || 'mindmap', message.renewUntil, message.baselineHashes, message.requestFingerprint, String(message.requestText || ''), String(message.requestMessageId || '')) };
+    if (message.action === 'start') { start(taskId, String(message.prompt || ''), message.mode || 'image-edit', String(message.imageDataUrl || ''), Array.isArray(message.imageDataUrls) ? message.imageDataUrls : [], String(message.rawBridgeToken || '')).catch(error => { dispose(taskId); emit(taskId, 'needs-attention', { code: 'content-error', error: String(error?.message || 'Dola 页面处理失败。') }); }); return true; }
+    if (message.action === 'resume') { try { resume(taskId, message.baselineHashes, message.requestFingerprint, message.deadlineAt, message.mode || 'image-edit', message.stage || 'generating', String(message.rawBridgeToken || '')); } catch (error) { dispose(taskId); emit(taskId, 'needs-attention', { code: 'content-error', error: String(error?.message || 'Dola 页面恢复失败。') }); } return true; }
+    if (message.action === 'probe') return { ok: true, state: probeTask(taskId, message.mode || 'image-edit', message.renewUntil, message.baselineHashes, message.requestFingerprint) };
     if (message.action === 'stop') { dispose(taskId); return true; }
     if (message.action === 'ping') { emit(taskId, 'ready'); return true; }
     return false;
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { handle, extractAssistantText, watchReply, resume, start, probeTask, attachImage, attachImages, attachImagesDetailed, findAttachmentButton, openAttachmentInput, fillPrompt, findInput, inputText, editableText, normalizePromptText, promptSemanticText, promptMatches, bubbleMatchesPrompt, stripBubbleModePrefix, setInputValue, waitForAttachment, uploadHasStalled, active, hash, assistantMessages, assistantTurns, userMessages, taskRequest, imageCandidates, imageCandidate, dedupeImageCandidates, imageSourceKey, assistantActionBar, streamingBusyText, findImageReply, hasCompletionEvidence, generationBusy, findSendButton, acceptRawBridgeMessage, attachmentMarkers, attachmentPreviewImages, attachmentPreviewState, isLoadedAttachmentPreview, findFreshAttachmentPreview, attachmentReadyEvidence, attachmentProgress, attachmentIsComplete, attachmentIsError };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { handle, imageCandidates, imageCandidate, dedupeImageCandidates, imageSourceKey, findImageReply, hasCompletionEvidence, rawForAlias, dolaUrlKeys, acceptRawBridgeMessage, findAttachmentButton, findAttachmentInput, findOpenUploadMenuItem, openAttachmentInput, waitForAttachment, attachImagesDetailed, attachmentMarkers, attachmentPreviewImages, attachmentPreviewState, attachmentMarkerState, attachmentIsBusy, attachmentIsComplete, attachmentIsError, isLoadedAttachmentPreview, attachmentProgress, attachmentReadyEvidence, setInputValue, fillPrompt, realActivate, plusGlyphButton, isSendControl, iconOnlyNonSend, resultActionBarPresent, streamingBusyText, active, hash, visible, textOf, findInput, findSendButton, userMessages, assistantTurns, generationBusy, start, resume, probeTask, dispose };
   globalThis.chrome?.runtime?.onMessage?.addListener((message, sender, sendResponse) => {
     const handled = handle(message, sender);
     if (!handled) return false;

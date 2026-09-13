@@ -18,7 +18,7 @@
     getContentScript() { return 'gpt-content.js'; }
     getCommandType() { return 'qd-ai-gpt-command'; }
     getLabel() { return 'GPT'; }
-    getTextPrompt(prompt, taskId) { return AI.buildGPTPrompt(prompt, taskId); }
+    getTextPrompt(prompt, taskId, diagramType = 'flowchart') { return AI.buildGPTPrompt(prompt, taskId, diagramType); }
     getImagePrompt(prompt, taskId) { return AI.buildGPTImagePrompt(prompt, taskId); }
     isAllowedOutputImageUrl(url) { return !!Image?.isAllowedImageUrl?.(url); }
     getOutputPermissionOrigins(url) {
@@ -200,7 +200,7 @@
         for (const blob of imageBlobs) imageDataUrls.push(await Image.blobToDataUrl(blob, { maxBytes: Image.MAX_INPUT_BYTES }));
         return this.command(task, { action: 'start', mode: 'image-edit', imageDataUrl: imageDataUrls[0] || '', imageDataUrls, prompt: this.getImagePrompt(task.prompt, task.taskId) });
       }
-      return this.command(task, { action: 'start', mode: 'mindmap', prompt: this.getTextPrompt(task.prompt, task.taskId) });
+      return this.command(task, { action: 'start', mode: 'mindmap', prompt: this.getTextPrompt(task.prompt, task.taskId, task.diagramType) });
     }
     resume(task) { return this.command(task, { action: 'resume', mode: task.kind === 'image-edit' ? 'image-edit' : 'mindmap', stage: task.stage || '', baselineHashes: task.baselineHashes || [], requestFingerprint: task.requestFingerprint, deadlineAt: task.stageDeadlineAt || task.deadlineAt }); }
     async materializeImage(event = {}) {

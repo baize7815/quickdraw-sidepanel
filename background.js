@@ -1,6 +1,6 @@
 'use strict';
 
-importScripts('core-utils.js', 'storage.js', 'ai-image-utils.js', 'ai-protocol.js', 'ai-task-store.js', 'ai-gpt-provider.js', 'ai-doubao-provider.js', 'ai-grok-provider.js', 'ai-router.js');
+importScripts('core-utils.js', 'storage.js', 'ai-image-utils.js', 'ai-protocol.js', 'ai-task-store.js', 'ai-gpt-provider.js', 'ai-doubao-provider.js', 'ai-grok-provider.js', 'ai-dola-provider.js', 'ai-router.js');
 
 const assetStore = new QuickdrawStorage();
 const aiRouter = globalThis.QuickdrawAIRouter ? new QuickdrawAIRouter({ assetStore }) : null;

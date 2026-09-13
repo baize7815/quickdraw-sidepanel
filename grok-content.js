@@ -304,7 +304,7 @@
     const value = attrs.map(name => element?.getAttribute?.(name) || '').join(' ').toLowerCase();
     const classes = String(element?.className || '').toLowerCase();
     if (/(?:^|[\s_-])(user|human|用户)(?:$|[\s_-])/.test(`${value} ${classes}`)) return 'user';
-    if (/(?:^|[\s_-])(assistant|bot|ai|Grok|助手)(?:$|[\s_-])/.test(`${value} ${classes}`)) return 'assistant';
+    if (/(?:^|[\s_-])(assistant|bot|ai|grok|助手)(?:$|[\s_-])/.test(`${value} ${classes}`)) return 'assistant';
     return '';
   }
 

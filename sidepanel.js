@@ -89,6 +89,7 @@
       this.aiTaskStore = globalThis.QuickdrawAITaskStore ? new globalThis.QuickdrawAITaskStore() : null;
       this.aiTasks = [];
       this.aiProvider = 'gpt';
+      this.aiDiagramType = 'flowchart';
       this.aiImporting = new Set();
       this.aiTaskReceipts = new Map();
       this.aiSubmitBusy = false;
@@ -102,6 +103,8 @@
       this.instanceId = globalThis.QDCore.newId('i');
       this.documentRevision = 0;
       this.saveQueue = Promise.resolve();
+      this.assetGcQueue = Promise.resolve();
+      this.lastAssetGcAt = 0;
       this.dirty = false;
       this.windowId = null;
       this.snapToGrid = true;
@@ -159,6 +162,7 @@
       this.currentMindStyle = prefs.mindStyle || 'rounded';
       this.snapToGrid = prefs.snapToGrid !== false;
       this.aiProvider = globalThis.QuickdrawAI?.provider(prefs.aiProvider)?.id || 'gpt';
+      this.aiDiagramType = globalThis.QuickdrawAI?.normalizeDiagramType?.(prefs.aiDiagramType) || 'flowchart';
       this.applyTheme();
       this.syncGridUI();
 
@@ -257,7 +261,82 @@
         this.toast('保存失败：请导出项目文件后重试。');
         throw error;
       });
+      // Reclaim orphaned image blobs after the document is safely persisted.
+      // Throttled and fully backgrounded: never block or fail the save itself.
+      this.saveQueue.then(() => this.runAssetGarbageCollection()).catch(() => {});
       return this.saveQueue;
+    }
+
+    // Collect every assetId that is still reachable from live documents, undo/redo
+    // history, stored version snapshots or in-flight AI tasks. Anything not in this
+    // set is an orphan blob that is safe to delete from IndexedDB.
+    async collectReferencedAssetIds() {
+      const keep = new Set();
+      const addElement = element => { if (element?.assetId) keep.add(String(element.assetId)); };
+      const addElements = elements => (elements || []).forEach(addElement);
+      const addReceipts = receipts => {
+        for (const receipt of Object.values(receipts || {})) {
+          if (receipt?.outputAssetId) keep.add(String(receipt.outputAssetId));
+          (receipt?.outputAssetIds || []).forEach(id => id && keep.add(String(id)));
+        }
+      };
+      // Live board (may include edits not persisted yet) and its undo/redo history,
+      // so cropping/removing a background stays undoable after a GC pass.
+      addElements(this.elements);
+      for (const patch of [...(this.history || []), ...(this.redos || [])]) {
+        for (const change of patch.changes || []) { addElement(change.before); addElement(change.after); }
+      }
+      addReceipts(Object.fromEntries(this.aiTaskReceipts || []));
+      // Every persisted document across all boards.
+      const index = (await this.storageGet([this.INDEX_KEY]))[this.INDEX_KEY];
+      const fileIds = (index?.files || []).map(file => file.id);
+      if (fileIds.length) {
+        const documents = await this.storageGet(fileIds.map(id => this.fileKey(id)));
+        for (const id of fileIds) {
+          const document = documents[this.fileKey(id)];
+          addElements(document?.elements);
+          addReceipts(document?.aiTaskReceipts);
+        }
+        // Stored version snapshots (up to 30 per board).
+        for (const id of fileIds) {
+          try {
+            const versions = await this.store.listVersions(id);
+            for (const version of versions) addElements(version.document?.elements);
+          } catch (error) { console.warn('Quickdraw version scan failed', error); }
+        }
+      }
+      // Inputs/outputs owned by background AI tasks that have not been cleaned up.
+      try {
+        const tasks = (await this.store.get('quickdraw_ai_tasks_v1'))['quickdraw_ai_tasks_v1'];
+        for (const task of Array.isArray(tasks) ? tasks : []) {
+          if (task.inputAssetId) keep.add(String(task.inputAssetId));
+          if (task.outputAssetId) keep.add(String(task.outputAssetId));
+          (task.inputAssetIds || []).forEach(id => id && keep.add(String(id)));
+          (task.inputAssets || []).forEach(item => item?.assetId && keep.add(String(item.assetId)));
+          (task.outputImages || []).forEach(item => item?.assetId && keep.add(String(item.assetId)));
+        }
+      } catch (error) { console.warn('Quickdraw AI task scan failed', error); }
+      return keep;
+    }
+
+    isImageEditBusy() {
+      return !!(this.editingBusy || this.backgroundRemovalInProgress || this.watermarkRemovalInProgress || this.cropTarget || this.watermarkTarget);
+    }
+
+    async runAssetGarbageCollection(options = {}) {
+      const force = options.force === true;
+      const now = Date.now();
+      if (!force && now - this.lastAssetGcAt < 60_000) return;
+      // Never collect while an edit may have staged a new asset that is not yet
+      // attached to an element; the next save will run the GC instead.
+      if (this.isImageEditBusy()) return;
+      this.assetGcQueue = this.assetGcQueue.catch(() => {}).then(async () => {
+        if (this.isImageEditBusy()) return;
+        const referenced = await this.collectReferencedAssetIds();
+        await this.store.cleanupAssets(referenced);
+        this.lastAssetGcAt = Date.now();
+      }).catch(error => console.warn('Quickdraw asset GC failed', error));
+      return this.assetGcQueue;
     }
 
     scheduleSave() {
@@ -351,6 +430,7 @@
         await this.openFile(nextId, false, true);
       }
       await this.store.deleteVersions(id).catch(error=>console.warn('Quickdraw version cleanup failed',error));
+      this.runAssetGarbageCollection({ force: true }).catch(error=>console.warn('Quickdraw asset GC failed',error));
       this.renderFilesMenu();
     }
 
@@ -699,27 +779,48 @@
       } else if (el.type === 'mindnode') {
         const w=el.w||150,h=el.h||44;
         const isRoot=!el.parentId&&!el.mermaid;
-        this.mindNodePath(ctx,el);
         const nodeBg=el.bgColor || (this.theme==='dark'?(isRoot?'#34302a':'#24211d'):(isRoot?'#fffdf8':'#ffffff'));
         const nodeBgOpacity=el.bgOpacity==null?1:clamp(Number(el.bgOpacity),0,1);
-        ctx.save();
-        ctx.fillStyle=nodeBg;
-        ctx.globalAlpha*=Number.isFinite(nodeBgOpacity)?nodeBgOpacity:1;
-        ctx.fill();
-        ctx.restore();
-        ctx.strokeStyle=el.color || (this.theme==='dark'?'#d8d3ca':'#5d5952');
-        ctx.lineWidth=(isRoot?2:1.35)*(this.exporting?1:1/this.scale);
-        ctx.setLineDash([]);
-        ctx.stroke();
-        ctx.fillStyle=el.textColor || (this.theme==='dark'?'rgba(255,255,255,.94)':'#292722');
-        ctx.font=`${isRoot?600:500} ${el.fontSize||15}px ui-sans-serif,system-ui,sans-serif`;
-        ctx.textBaseline='middle';
-        ctx.textAlign='center';
-        const pad=el.nodeShape==='diamond'?42:24;
-        const lines=this.getMindNodeLines(ctx,el.text||'',Math.max(36,w-pad));
-        const lh=(el.fontSize||15)*1.3;
-        const startY=el.y+h/2-(lines.length-1)*lh/2;
-        lines.forEach((line,i)=>ctx.fillText(line,el.x+w/2,startY+i*lh));
+        const stroke=el.color || (this.theme==='dark'?'#d8d3ca':'#5d5952');
+        const fg=el.textColor || (this.theme==='dark'?'rgba(255,255,255,.94)':'#292722');
+        if(el.mermaidRole==='state-start'){
+          ctx.beginPath();ctx.arc(el.x+w/2,el.y+h/2,Math.min(w,h)/2,0,Math.PI*2);ctx.fillStyle=stroke;ctx.fill();
+        }else if(el.mermaidRole==='state-end'){
+          const r=Math.min(w,h)/2;
+          ctx.beginPath();ctx.arc(el.x+w/2,el.y+h/2,r,0,Math.PI*2);ctx.fillStyle=nodeBg;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=1.6*(this.exporting?1:1/this.scale);ctx.stroke();
+          ctx.beginPath();ctx.arc(el.x+w/2,el.y+h/2,Math.max(3,r-5*(this.exporting?1:1/this.scale)),0,Math.PI*2);ctx.fillStyle=stroke;ctx.fill();
+        }else if(el.mermaidType==='class'){
+          ctx.beginPath();if(ctx.roundRect)ctx.roundRect(el.x,el.y,w,h,4);else ctx.rect(el.x,el.y,w,h);
+          ctx.save();ctx.fillStyle=nodeBg;ctx.globalAlpha*=Number.isFinite(nodeBgOpacity)?nodeBgOpacity:1;ctx.fill();ctx.restore();
+          ctx.strokeStyle=stroke;ctx.lineWidth=1.35*(this.exporting?1:1/this.scale);ctx.setLineDash([]);ctx.stroke();
+          const rawLines=String(el.text||'').split('\n'),title=rawLines[0]||'',members=rawLines.slice(1),fs=el.fontSize||15;
+          const titleH=38;
+          if(members.length){ctx.beginPath();ctx.moveTo(el.x,el.y+titleH);ctx.lineTo(el.x+w,el.y+titleH);ctx.stroke();}
+          ctx.fillStyle=fg;ctx.textBaseline='middle';ctx.font=`600 ${fs}px ui-sans-serif,system-ui,sans-serif`;ctx.textAlign='center';ctx.fillText(title,el.x+w/2,el.y+titleH/2);
+          ctx.font=`500 ${Math.max(12,fs-1)}px ui-monospace,SFMono-Regular,Consolas,monospace`;ctx.textAlign='left';
+          const lineH=22,memberY=el.y+titleH+lineH/2+5;
+          members.forEach((line,i)=>{if(memberY+i*lineH<=el.y+h-8)ctx.fillText(line,el.x+12,memberY+i*lineH);});
+        }else{
+          this.mindNodePath(ctx,el);
+          ctx.save();
+          ctx.fillStyle=nodeBg;
+          ctx.globalAlpha*=Number.isFinite(nodeBgOpacity)?nodeBgOpacity:1;
+          ctx.fill();
+          ctx.restore();
+          ctx.strokeStyle=stroke;
+          ctx.lineWidth=(isRoot?2:1.35)*(this.exporting?1:1/this.scale);
+          ctx.setLineDash([]);
+          ctx.stroke();
+          ctx.fillStyle=fg;
+          ctx.font=`${isRoot?600:500} ${el.fontSize||15}px ui-sans-serif,system-ui,sans-serif`;
+          ctx.textBaseline='middle';
+          ctx.textAlign='center';
+          const pad=el.nodeShape==='diamond'?42:24;
+          const lines=this.getMindNodeLines(ctx,el.text||'',Math.max(36,w-pad));
+          const lh=(el.fontSize||15)*1.3;
+          const startY=el.y+h/2-(lines.length-1)*lh/2;
+          lines.forEach((line,i)=>ctx.fillText(line,el.x+w/2,startY+i*lh));
+        }
       } else if (el.type === 'note') {
         const w=el.w||180,h=el.h||130;
         ctx.fillStyle=el.bgColor || (this.theme==='dark'?'#6f5b20':'#fff0a6'); ctx.shadowColor='rgba(0,0,0,.12)'; ctx.shadowBlur=8; ctx.fillRect(el.x,el.y,w,h); ctx.shadowColor='transparent';
@@ -953,6 +1054,17 @@
       for(const el of items){const box=this.getElementBBox(el),a=this.alignmentAnchors(box);let dx=0,dy=0;if(mode==='left')dx=target.left-a.left;if(mode==='right')dx=target.right-a.right;if(mode==='hcenter')dx=target.center-a.center;if(mode==='top')dy=target.top-a.top;if(mode==='bottom')dy=target.bottom-a.bottom;if(mode==='vcenter')dy=target.middle-a.middle;this.moveElement(el,dx,dy);}this.commit();this.render();
     }
 
+    centerSelectedBoth(){
+      const items=this.getSelectedElements().filter(el=>el.type!=='mindedge');
+      if(items.length<2){this.toast('至少选择两个对象才能水平垂直居中。');return;}
+      const outer=this.getElementsBBox(items),target=this.alignmentAnchors(outer);
+      for(const el of items){
+        const a=this.alignmentAnchors(this.getElementBBox(el));
+        this.moveElement(el,target.center-a.center,target.middle-a.middle);
+      }
+      this.commit();this.render();
+    }
+
     distributeSelected(axis){
       const items=this.getSelectedElements().filter(el=>el.type!=='mindedge');if(items.length<3){this.toast('至少选择三个对象才能等间距分布。');return;}const data=items.map(el=>({el,box:this.getElementBBox(el)})).sort((a,b)=>axis==='x'?a.box.x-b.box.x:a.box.y-b.box.y);const first=data[0].box,last=data.at(-1).box,total=data.reduce((sum,item)=>sum+(axis==='x'?item.box.w:item.box.h),0),span=axis==='x'?last.x+last.w-first.x:last.y+last.h-first.y,gap=(span-total)/(data.length-1);let cursor=axis==='x'?first.x:first.y;for(const item of data){const current=axis==='x'?item.box.x:item.box.y;this.moveElement(item.el,axis==='x'?cursor-current:0,axis==='y'?cursor-current:0);cursor+=(axis==='x'?item.box.w:item.box.h)+gap;}this.commit();this.render();
     }
@@ -1085,6 +1197,9 @@
       this.container.addEventListener('dblclick',e=>{ const p=this.eventPos(e);if(this.cropTarget){e.preventDefault();const q=this.imageLocalPoint(this.cropTarget,p),r=this.cropRect;if(r&&r.w>0&&r.h>0&&q.x>=r.x&&q.x<=r.x+r.w&&q.y>=r.y&&q.y<=r.y+r.h)this.applyImageCrop({...r});return;}const hit=this.selectAt(p);if(!hit)return;if(['text','note','mindnode'].includes(hit.type)){this.setSelection([hit]);this.editTextElement(hit);} });
 
       window.addEventListener('keydown',e=>this.onKeyDown(e));
+      window.addEventListener('keydown',e=>{
+        if(e.key==='Escape'&&this.backgroundRemovalController){e.preventDefault();e.stopImmediatePropagation();this.backgroundRemovalController.abort();}
+      },true);
       window.addEventListener('keyup',e=>{if(e.code==='Space')this.spaceDown=false;});
     }
 
@@ -1199,6 +1314,7 @@
       if(this.watermarkTarget){if(key==='escape'){e.preventDefault();this.cancelWatermarkRemoval(true);}return;}
       if(this.cropTarget){if(key==='escape'){e.preventDefault();this.cancelImageCrop(true);}return;}
       if(mod&&key==='c'){e.preventDefault();const selected=this.getSelectedElements();if(selected.length)this.copyPNG(selected);else this.toast('请先选择要复制的对象。');return;}
+      if(e.altKey&&!mod&&key==='c'){e.preventDefault();this.centerSelectedBoth();return;}
       if(e.altKey&&!mod&&['t','l','r','b'].includes(key)){e.preventDefault();this.alignSelected(({t:'top',l:'left',r:'right',b:'bottom'})[key]);return;}
       if(mod&&key==='f'){e.preventDefault();this.openSearchDialog();return;}
       if(!$('#storage-dialog').hidden&&key==='escape'){e.preventDefault();this.closeStorageDialog();return;}if(!$('#clear-dialog').hidden&&key==='escape'){e.preventDefault();this.closeClearDialog();return;}if(e.code==='Space'){this.spaceDown=true;e.preventDefault();return;}if(mod&&key==='z'){e.preventDefault();e.shiftKey?this.redo():this.undo();return;}if(mod&&key==='y'){e.preventDefault();this.redo();return;}if(mod&&key==='d'){e.preventDefault();this.duplicateSelected();return;}if(mod&&key==='g'){e.preventDefault();e.shiftKey?this.ungroupSelected():this.groupSelected();return;}if(key==='tab'&&this.getMindFocus()){e.preventDefault();const node=this.getMindFocus();this.createMindRelative(node,e.shiftKey?'sibling':'child');return;}if(mod&&(e.code==='BracketLeft'||key==='[')){e.preventDefault();this.moveSelectedLayer(-1,e.shiftKey);return;}if(mod&&(e.code==='BracketRight'||key===']')){e.preventDefault();this.moveSelectedLayer(1,e.shiftKey);return;}if(key==='delete'||key==='backspace'){e.preventDefault();this.deleteSelected();return;}if(key==='escape'){this.closePopovers();this.clearSelection();this.render();return;}if(key==='f'){this.fitContent();return;}
@@ -1352,7 +1468,7 @@
     drawMindEdge(ctx,edge,selected=false) {
       const pts=this.mindEdgeSamplePoints(edge);if(pts.length<2)return;
       const stroke=selected?(getComputedStyle(this.app).getPropertyValue('--sel').trim()||'#2f6fed'):(edge.color||(this.theme==='dark'?'#9aa3ad':'#7d8794'));
-      const unit=this.exporting?1:1/this.scale;ctx.save();ctx.strokeStyle=stroke;ctx.fillStyle=stroke;ctx.lineWidth=(selected?3.2:(edge.size||1.6))*unit;ctx.lineCap='round';ctx.lineJoin='round';ctx.setLineDash([]);ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.stroke();
+      const unit=this.exporting?1:1/this.scale;ctx.save();ctx.strokeStyle=stroke;ctx.fillStyle=stroke;ctx.lineWidth=(selected?3.2:(edge.size||1.6))*unit;ctx.lineCap='round';ctx.lineJoin='round';ctx.setLineDash(edge.dashed?[6*unit,5*unit]:[]);ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.stroke();
       if(edge.arrow){let i=pts.length-2;while(i>0&&Math.hypot(pts.at(-1).x-pts[i].x,pts.at(-1).y-pts[i].y)<.01)i--;const a=pts[i],b=pts.at(-1),ang=Math.atan2(b.y-a.y,b.x-a.x),len=10*unit;ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(b.x-len*Math.cos(ang-.55),b.y-len*Math.sin(ang-.55));ctx.moveTo(b.x,b.y);ctx.lineTo(b.x-len*Math.cos(ang+.55),b.y-len*Math.sin(ang+.55));ctx.stroke();}
       if(edge.label){const q=this.mindEdgeLabelPoint(edge,pts),text=String(edge.label);ctx.font=`500 ${12*unit}px ui-sans-serif,system-ui,sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';const w=ctx.measureText(text).width+10*unit,h=18*unit;ctx.fillStyle=this.theme==='dark'?'#191713':'#F9FAFB';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(q.x-w/2,q.y-h/2,w,h,4*unit);ctx.fill();}else ctx.fillRect(q.x-w/2,q.y-h/2,w,h);ctx.fillStyle=selected?(getComputedStyle(this.app).getPropertyValue('--sel').trim()||'#2f6fed'):(this.theme==='dark'?'#e5e7eb':'#4b5563');ctx.fillText(text,q.x,q.y);}
       ctx.restore();
@@ -1524,7 +1640,24 @@
       const groups=new Map();for(const d of defs){let lv=level.get(d.id)||0;if(reverse)lv=maxLevel-lv;if(!groups.has(lv))groups.set(lv,[]);groups.get(lv).push(d);}
       const cx=(this.width/2-this.offsetX)/this.scale,cy=(this.height/2-this.offsetY)/this.scale;
       const nodeMap=new Map(),created=[];
-      for(const d of defs){const node={id:newId(),type:'mindnode',mermaid:true,mermaidId:d.id,nodeShape:d.shape||'rect',x:0,y:0,w:150,h:44,text:d.text||d.id,parentId:null,fontSize:15,color:this.theme==='dark'?'#d8d3ca':'#5d5952',textColor:this.theme==='dark'?'#ffffff':'#1f1f1f',bgColor:this.theme==='dark'?'#24211d':'#ffffff'};this.updateMindNodeMetrics(node);if(node.nodeShape==='diamond'){node.w=Math.max(160,node.w+26);node.h=Math.max(76,node.h+22);}else if(node.nodeShape==='ellipse'||node.nodeShape==='pill')node.h=Math.max(48,node.h);nodeMap.set(d.id,node);created.push(node);}
+      for(const d of defs){
+        const node={id:newId(),type:'mindnode',mermaid:true,mermaidType:parsed.type||'flowchart',mermaidRole:d.role||'',mermaidId:d.id,nodeShape:d.shape||'rect',x:0,y:0,w:150,h:44,text:d.text||d.id,parentId:null,fontSize:15,color:this.theme==='dark'?'#d8d3ca':'#5d5952',textColor:this.theme==='dark'?'#ffffff':'#1f1f1f',bgColor:this.theme==='dark'?'#24211d':'#ffffff'};
+        if(node.mermaidRole==='state-start'||node.mermaidRole==='state-end'){
+          node.w=28;node.h=28;node.text='';node.nodeShape='ellipse';
+        }else{
+          this.updateMindNodeMetrics(node);
+          if(node.nodeShape==='diamond'){node.w=Math.max(160,node.w+26);node.h=Math.max(76,node.h+22);}
+          else if(node.nodeShape==='ellipse'||node.nodeShape==='pill')node.h=Math.max(48,node.h);
+          if((parsed.type||'flowchart')==='class'){
+            const rawLines=String(node.text||'').split('\n');
+            this.ctx.save();this.ctx.font=`500 ${node.fontSize||15}px ui-sans-serif,system-ui,sans-serif`;
+            const measured=Math.max(180,...rawLines.map(line=>this.ctx.measureText(line||' ').width+38));this.ctx.restore();
+            node.w=Math.max(220,Math.min(340,measured));
+            node.h=Math.max(72,48+Math.max(0,rawLines.length-1)*23+16);
+          }
+        }
+        nodeMap.set(d.id,node);created.push(node);
+      }
       if(horizontal){
         const levelGap=220,rowGap=34,baseX=cx-maxLevel*levelGap/2;
         for(const [lv,items] of [...groups].sort((a,b)=>a[0]-b[0])){const nodes=items.map(d=>nodeMap.get(d.id)),total=nodes.reduce((a,n)=>a+n.h,0)+rowGap*Math.max(0,nodes.length-1);let y=cy-total/2;for(const n of nodes){n.x=baseX+lv*levelGap-n.w/2;n.y=y;y+=n.h+rowGap;}}
@@ -1534,6 +1667,163 @@
       }
       const edgeEls=[];for(const e of links){const from=nodeMap.get(e.from),to=nodeMap.get(e.to);if(!from||!to)continue;let fromSide='bottom',toSide='top';if(dir==='BT'){fromSide='top';toSide='bottom';}else if(dir==='LR'){fromSide='right';toSide='left';}else if(dir==='RL'){fromSide='left';toSide='right';}edgeEls.push({id:newId(),type:'mindedge',fromId:from.id,toId:to.id,fromSide,toSide,style:this.currentMindStyle,color:this.theme==='dark'?'#9aa3ad':'#7d8794',size:1.6,arrow:true,label:e.label||''});}
       return{nodes:created,edges:edgeEls};
+    }
+
+    layoutMermaidDiagram(parsed){
+      if(!parsed)return null;
+      if(parsed.type==='sequence')return this.layoutMermaidSequence(parsed);
+      if(parsed.type==='state')return this.layoutMermaidState(parsed);
+      if(parsed.type==='gantt')return this.layoutMermaidGantt(parsed);
+      if(parsed.type==='class')return this.layoutMermaidClass(parsed);
+      return this.layoutMermaidFlowchart(parsed);
+    }
+
+    layoutMermaidState(parsed){
+      const layout=this.layoutMermaidFlowchart(parsed);if(!layout)return null;
+      for(const node of layout.nodes||[]){
+        if(node.mermaidRole==='state-start'){
+          node.w=28;node.h=28;node.text='';node.nodeShape='ellipse';node.bgColor=this.theme==='dark'?'#e5e7eb':'#252525';node.color=node.bgColor;
+        }else if(node.mermaidRole==='state-end'){
+          node.w=30;node.h=30;node.text='';node.nodeShape='ellipse';node.bgColor=this.theme==='dark'?'#191713':'#ffffff';node.color=this.theme==='dark'?'#e5e7eb':'#252525';
+        }else{
+          node.nodeShape='rounded';node.w=Math.max(150,node.w);node.h=Math.max(48,node.h);
+        }
+      }
+      for(const edge of layout.edges||[])edge.style='orthogonal';
+      return layout;
+    }
+
+    layoutMermaidClass(parsed){
+      const layout=this.layoutMermaidFlowchart({...parsed,direction:parsed.direction||'LR'});if(!layout)return null;
+      for(const node of layout.nodes||[]){node.nodeShape='rect';node.w=Math.max(220,node.w);node.h=Math.max(72,node.h);}
+      for(const edge of layout.edges||[]){
+        edge.style='orthogonal';
+        const relation=String(edge.label||'').match(/^(<\|--|--\|>|\*--|--\*|o--|--o|\.\.>|<\.\.|-->|<--|--|\.\.)/)?.[1]||'';
+        if(relation.includes('.'))edge.dashed=true;
+        if(relation==='--'||relation==='..')edge.arrow=false;
+      }
+      return layout;
+    }
+
+    layoutMermaidSequence(parsed){
+      const participants=parsed.participants||[],messages=parsed.messages||[];if(!participants.length)return null;
+      const cx=(this.width/2-this.offsetX)/this.scale,cy=(this.height/2-this.offsetY)/this.scale;
+      const stroke=this.theme==='dark'?'#d8d3ca':'#5d5952',textColor=this.theme==='dark'?'#ffffff':'#1f1f1f',bg=this.theme==='dark'?'#24211d':'#ffffff',edgeColor=this.theme==='dark'?'#9aa3ad':'#7d8794';
+      const colGap=210,rowGap=70,topY=cy-(Math.max(1,messages.length)*rowGap+120)/2;
+      const left=cx-(participants.length-1)*colGap/2;
+      const created=[],edges=[],column=new Map();
+      const makeNode=(id,text,x,y,w=150,h=44,hidden=false)=>{
+        const node={id:newId(),type:'mindnode',mermaid:true,mermaidType:'sequence',mermaidRole:hidden?'sequence-anchor':'sequence-participant',mermaidId:id,nodeShape:hidden?'ellipse':'rounded',x,y,w,h,text:hidden?'':text,parentId:null,fontSize:15,color:hidden?'rgba(0,0,0,0)':stroke,textColor:hidden?'rgba(0,0,0,0)':textColor,bgColor:bg,bgOpacity:hidden?0:1};
+        if(!hidden){const centerX=x+w/2;this.updateMindNodeMetrics(node);node.w=Math.max(138,node.w);node.h=Math.max(44,node.h);node.x=centerX-node.w/2;}
+        created.push(node);return node;
+      };
+      participants.forEach((part,index)=>{
+        const x=left+index*colGap;column.set(part.id,x);
+        const header=makeNode(part.id,part.text||part.id,x-75,topY,150,44,false);
+        const bottom=makeNode(`${part.id}_life_end`,'',x-5,topY+90+Math.max(1,messages.length)*rowGap,10,10,true);
+        edges.push({id:newId(),type:'mindedge',fromId:header.id,toId:bottom.id,fromSide:'bottom',toSide:'top',style:'orthogonal',color:edgeColor,size:1.1,arrow:false,dashed:true,label:'',mermaidType:'sequence',mermaidRole:'sequence-lifeline'});
+      });
+      messages.forEach((msg,index)=>{
+        const y=topY+90+index*rowGap,fromX=column.get(msg.from),toX=column.get(msg.to);
+        if(fromX==null||toX==null)return;
+        const a=makeNode(`msg_${index+1}_from`,'',fromX-5,y-5,10,10,true);
+        let targetX=toX;
+        if(msg.from===msg.to)targetX=toX+Math.min(110,colGap*.55);
+        const b=makeNode(`msg_${index+1}_to`,'',targetX-5,y-5,10,10,true);
+        const toRight=targetX>=fromX;
+        const label=`${parsed.autonumber?`${index+1}. `:''}${msg.label||''}`;
+        edges.push({id:newId(),type:'mindedge',fromId:a.id,toId:b.id,fromSide:toRight?'right':'left',toSide:toRight?'left':'right',style:'orthogonal',color:edgeColor,size:1.6,arrow:true,dashed:!!msg.dashed,label,mermaidType:'sequence',mermaidRole:'sequence-message'});
+      });
+      return{nodes:created,edges};
+    }
+
+    layoutMermaidGantt(parsed){
+      const tasks=(parsed.tasks||[]).map(task=>({...task}));if(!tasks.length)return null;
+      const toDay=value=>{const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return null;return Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3]))/86400000;};
+      const byId=new Map(tasks.map(task=>[task.id,task]));
+      for(const task of tasks){const absolute=toDay(task.startRaw);if(absolute!=null)task.startDay=absolute;}
+      for(let pass=0;pass<tasks.length+2;pass++){
+        let changed=false;
+        for(const task of tasks){
+          if(task.startDay!=null||!task.after)continue;
+          const parent=byId.get(task.after);
+          if(parent?.startDay!=null){task.startDay=parent.startDay+Number(parent.durationDays||1);changed=true;}
+        }
+        if(!changed)break;
+      }
+      let fallback=Math.min(...tasks.map(task=>task.startDay).filter(Number.isFinite));
+      if(!Number.isFinite(fallback))fallback=Math.floor(Date.now()/86400000);
+      let cursor=fallback;
+      for(const task of tasks){
+        if(task.startDay==null)task.startDay=cursor;
+        task.endDay=task.startDay+Number(task.durationDays||1);
+        cursor=Math.max(cursor,task.endDay);
+      }
+      const minDay=Math.floor(Math.min(...tasks.map(task=>task.startDay)));
+      const maxDay=Math.ceil(Math.max(...tasks.map(task=>task.endDay)));
+      const span=Math.max(1,maxDay-minDay);
+      const dayPx=Math.max(64,Math.min(118,900/span));
+      const timelineWidth=span*dayPx;
+      const sections=[];const sectionTasks=new Map();
+      for(const task of tasks){if(!sectionTasks.has(task.section)){sectionTasks.set(task.section,[]);sections.push(task.section);}sectionTasks.get(task.section).push(task);}
+      const sectionGap=14,taskH=28,laneGap=8,sectionPad=14;
+      const sectionHeights=new Map();
+      let chartH=0;
+      for(const section of sections){const count=Math.max(1,sectionTasks.get(section).length);const h=sectionPad*2+count*taskH+Math.max(0,count-1)*laneGap;sectionHeights.set(section,h);chartH+=h+sectionGap;}
+      chartH=Math.max(100,chartH-sectionGap);
+      const cx=(this.width/2-this.offsetX)/this.scale,cy=(this.height/2-this.offsetY)/this.scale;
+      const labelW=118,left=cx-(timelineWidth+labelW)/2+labelW,top=cy-chartH/2+20;
+      const axisY=top-42,titleY=axisY-58;
+      const dark=this.theme==='dark',stroke=dark?'#d8d3ca':'#5d5952',textColor=dark?'#ffffff':'#1f1f1f';
+      const gridColor=dark?'#4a4d52':'#d9dde3',separatorColor=dark?'#3e4146':'#e6e8eb';
+      const taskStroke=dark?'#7aa7ff':'#5f95f5',taskBg=dark?'#243247':'#edf4ff';
+      const doneBg=dark?'#30343a':'#eef0f2',doneStroke=dark?'#7b8189':'#aeb5bd';
+      const critBg=dark?'#4a2929':'#fff0f0',critStroke=dark?'#e07a7a':'#dc6666';
+      const created=[],edges=[];
+      const makeDecor=(id,text,x,y,w,h,opts={})=>{
+        const node={id:newId(),type:'mindnode',mermaid:true,mermaidType:'gantt',mermaidRole:opts.role||'gantt-decor',mermaidDecorative:true,mermaidId:id,nodeShape:opts.shape||'rect',x,y,w,h,text:text||'',parentId:null,fontSize:opts.fontSize||12,color:opts.color??'rgba(0,0,0,0)',textColor:opts.textColor||textColor,bgColor:opts.bgColor||'transparent',bgOpacity:opts.bgOpacity??0};
+        created.push(node);return node;
+      };
+      const makeAnchor=(id,x,y)=>{
+        const node=makeDecor(id,'',x-2,y-2,4,4,{role:'gantt-anchor',shape:'ellipse',color:'rgba(0,0,0,0)',bgOpacity:0});
+        return node;
+      };
+      const fmt=day=>{const d=new Date(Math.round(day)*86400000);return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;};
+
+      makeDecor('__gantt_title',parsed.title||'甘特图',left, titleY, Math.max(260,timelineWidth),36,{role:'gantt-title',fontSize:16});
+      const tickStep=Math.max(1,Math.ceil(span/10));
+      const tickDays=[];
+      for(let d=0;d<=span;d+=tickStep)tickDays.push(d);
+      if(tickDays.at(-1)!==span)tickDays.push(span);
+      for(const offset of tickDays){
+        const x=left+offset*dayPx;
+        makeDecor(`tick_${offset}`,fmt(minDay+offset),x-52,axisY-25,104,24,{role:'gantt-tick',fontSize:11});
+        const a=makeAnchor(`grid_${offset}_a`,x,axisY+4),b=makeAnchor(`grid_${offset}_b`,x,top+chartH);
+        edges.push({id:newId(),type:'mindedge',fromId:a.id,toId:b.id,fromSide:'bottom',toSide:'top',style:'orthogonal',color:gridColor,size:1,arrow:false,label:'',mermaidType:'gantt',mermaidRole:'gantt-grid'});
+      }
+
+      let y=top;
+      for(let si=0;si<sections.length;si++){
+        const section=sections[si],items=sectionTasks.get(section)||[],sectionH=sectionHeights.get(section)||70;
+        makeDecor(`band_${si}`,'',left,y,timelineWidth,sectionH,{role:'gantt-band',bgColor:dark?(si%2?'#202226':'#1c1e22'):(si%2?'#f8fafc':'#fffdf7'),bgOpacity:.72});
+        makeDecor(`section_${si}`,section,left-labelW-10,y+sectionH/2-18,labelW,36,{role:'gantt-section',fontSize:12});
+        items.forEach((task,lane)=>{
+          const x=left+(task.startDay-minDay)*dayPx;
+          const naturalW=Math.max(20,Number(task.durationDays||1)*dayPx);
+          const width=Math.max(28,naturalW-6);
+          const flags=new Set(task.flags||[]);
+          const isMilestone=flags.has('milestone');
+          const node={id:newId(),type:'mindnode',mermaid:true,mermaidType:'gantt',mermaidRole:isMilestone?'gantt-milestone':'gantt-task',mermaidId:task.id,nodeShape:isMilestone?'diamond':'rounded',x:x+3,y:y+sectionPad+lane*(taskH+laneGap),w:isMilestone?28:width,h:taskH,text:isMilestone?'':task.label,parentId:null,fontSize:12,color:flags.has('crit')?critStroke:flags.has('done')?doneStroke:taskStroke,textColor,bgColor:flags.has('crit')?critBg:flags.has('done')?doneBg:taskBg,bgOpacity:1};
+          if(isMilestone){node.y+=0;node.x=x+Math.max(0,naturalW/2-14);}
+          created.push(node);
+        });
+        if(si<sections.length-1){
+          const lineY=y+sectionH+sectionGap/2,a=makeAnchor(`sep_${si}_a`,left-labelW,lineY),b=makeAnchor(`sep_${si}_b`,left+timelineWidth,lineY);
+          edges.push({id:newId(),type:'mindedge',fromId:a.id,toId:b.id,fromSide:'right',toSide:'left',style:'orthogonal',color:separatorColor,size:1,arrow:false,label:'',mermaidType:'gantt',mermaidRole:'gantt-separator'});
+        }
+        y+=sectionH+sectionGap;
+      }
+      return{nodes:created,edges};
     }
 
     mermaidNodeToken(node,index){const id=node.mermaidId&&/^[A-Za-z_]\w*$/.test(node.mermaidId)?node.mermaidId:`node_${index+1}`,label=String(node.text||id).replace(/"/g,'&quot;').replace(/\n/g,'<br/>');if(node.nodeShape==='pill')return`${id}(["${label}"])`;if(node.nodeShape==='diamond')return`${id}{"${label}"}`;if(node.nodeShape==='ellipse')return`${id}(("${label}"))`;if(node.nodeShape==='rounded')return`${id}("${label}")`;return`${id}["${label}"]`;}
@@ -1549,11 +1839,20 @@
     }
     closeMermaidDialog(){const dialog=$('#mermaid-dialog');if(dialog)dialog.hidden=true;this.container.focus({preventScroll:true});}
     generateMermaidFromInput(){
-      const ta=$('#mermaid-input'),text=ta?.value||'';let parsed;try{parsed=this.parseMermaidFlowchart(text);}catch{this.toast('Mermaid 文本无法解析。');return;}
-      if(!parsed.nodes.length){this.toast('没有识别到流程图节点。');return;}
-      const layout=this.layoutMermaidFlowchart(parsed);if(!layout?.nodes?.length){this.toast('流程图生成失败。');return;}
-      if(this.mermaidEditMode){const ids=new Set(this.elements.filter(el=>el.type==='mindnode'&&el.mermaid).map(el=>el.id));this.elements=this.elements.filter(el=>!ids.has(el.id)&&!(el.type==='mindedge'&&(ids.has(el.fromId)||ids.has(el.toId))));}
-      this.elements.push(...layout.nodes);this.elements.unshift(...layout.edges);this.setSelection(layout.nodes,false);this.commit();this.render();this.closeMermaidDialog();this.toast(`${this.mermaidEditMode?'已更新':'已生成'} ${layout.nodes.length} 个节点、${layout.edges.length} 条连线。`);this.mermaidEditMode=false;
+      const ta=$('#mermaid-input'),text=ta?.value||'';
+      const checked=globalThis.QuickdrawAI?.validateMermaid?.(text);
+      if(!checked?.ok){this.toast(`Mermaid 文本无法解析：${checked?.error||'格式无效'}`);return;}
+      if(this.mermaidEditMode&&checked.type!=='flowchart'){this.toast('编辑模式目前只支持 Flowchart；其他图表请作为新图导入。');return;}
+      const parsed=checked.parsed;
+      if(!parsed?.nodes?.length){this.toast('没有识别到可导入节点。');return;}
+      const layout=this.layoutMermaidDiagram(parsed);if(!layout?.nodes?.length){this.toast('Mermaid 图表生成失败。');return;}
+      if(this.mermaidEditMode){
+        const ids=new Set(this.elements.filter(el=>el.type==='mindnode'&&el.mermaid&&(!el.mermaidType||el.mermaidType==='flowchart')).map(el=>el.id));
+        this.elements=this.elements.filter(el=>!ids.has(el.id)&&!(el.type==='mindedge'&&(ids.has(el.fromId)||ids.has(el.toId))));
+      }
+      this.elements.push(...layout.nodes);this.elements.unshift(...layout.edges);this.setSelection(layout.nodes,false);this.commit();this.render();this.closeMermaidDialog();
+      const names={flowchart:'Flowchart',sequence:'Sequence Diagram',state:'State Diagram',gantt:'Gantt',class:'Class Diagram'};
+      this.toast(`${this.mermaidEditMode?'已更新':'已生成'} ${names[checked.type]||'Mermaid'}：${layout.nodes.length} 个节点、${layout.edges.length} 条连线。`);this.mermaidEditMode=false;
     }
 
     // ---------- text ----------
@@ -1755,25 +2054,31 @@
       if(this.backgroundRemovalInProgress){this.toast('已有抠图任务正在处理。');return;}
       if(this.cropTarget){this.cropSession+=1;this.cropTarget=null;this.cropStart=null;this.cropDrag=null;this.cropRect=null;this.container.style.cursor='';this.container.classList.remove('crop-mode');}
       if(this.watermarkTarget){this.watermarkSession+=1;this.watermarkTarget=null;this.watermarkStart=null;this.watermarkRect=null;this.container.classList.remove('watermark-mode');}
+      const controller=new AbortController(),signal=controller.signal;this.backgroundRemovalController=controller;
       this.backgroundRemovalInProgress=true;this.updateHistoryUI();let succeeded=0,failed=0,lastError='';
       try{
         for(let index=0;index<targets.length;index+=1){
+          if(signal.aborted)break;
           const target=targets[index],prefix=targets.length>1?`[${index+1}/${targets.length}] `:'';
           try{
             if(!this.elements.includes(target))throw new Error('图片已从画布移除。');
             const record=await this.store.getAsset(target.assetId);if(!record?.blob)throw new Error('图片资源不存在。');
             const dimensions=await this.decodeImageBlob(record.blob);
-            const result=await this.koukoutuClient.removeBackground(record.blob,dimensions,update=>this.backgroundRemovalProgress(update,prefix));
+            signal.throwIfAborted();
+            const result=await this.koukoutuClient.removeBackground(record.blob,dimensions,update=>{if(!signal.aborted)this.backgroundRemovalProgress(update,prefix);},signal);
             const png=await this.imageBlobToPng(result);
+            signal.throwIfAborted();
             if(!this.elements.includes(target))throw new Error('图片已从画布移除。');
             const oldAssetId=target.assetId,newAssetId=await this.store.putAsset(png,{sourceUrl:target.sourceUrl||'',backgroundRemovedFrom:oldAssetId,service:'koukoutu'});
+            if(signal.aborted){await this.store.deleteAsset(newAssetId);break;}
             target.assetId=newAssetId;this.imageCache.delete(oldAssetId);this.getCachedImage(target);this.commit();this.render();succeeded+=1;
-          }catch(error){failed+=1;lastError=error?.message||'抠图失败';console.error(`Quickdraw background removal failed (${index+1}/${targets.length})`,error);this.toast(`${prefix}${lastError}，继续处理下一张…`);}
+          }catch(error){if(signal.aborted)break;failed+=1;lastError=error?.message||'抠图失败';console.error(`Quickdraw background removal failed (${index+1}/${targets.length})`,error);this.toast(`${prefix}${lastError}，继续处理下一张…`);}
         }
       }finally{
-        this.backgroundRemovalInProgress=false;this.setSelection(targets.filter(target=>this.elements.includes(target)),false);this.updateHistoryUI();this.render();
+        this.backgroundRemovalController=null;this.backgroundRemovalInProgress=false;this.setSelection(targets.filter(target=>this.elements.includes(target)),false);this.updateHistoryUI();this.render();
       }
-      if(succeeded&&failed)this.toast(`批量抠图完成：成功 ${succeeded} 张，失败 ${failed} 张。`);
+      if(signal.aborted)this.toast(`抠图已取消${succeeded?`，已完成 ${succeeded} 张，可撤销恢复`:''}。`);
+      else if(succeeded&&failed)this.toast(`批量抠图完成：成功 ${succeeded} 张，失败 ${failed} 张。`);
       else if(succeeded)this.toast(targets.length>1?`批量抠图完成，共 ${succeeded} 张。`:'背景已移除，可使用撤销恢复。');
       else this.toast(lastError||'抠图失败，请稍后重试。');
     }
@@ -1978,7 +2283,7 @@
       const blob=source instanceof Blob?source:await this.store.dataUrlToBlob(source),dimensions=await this.decodeImageBlob(blob),assetId=await this.store.putAsset(blob,{name:source?.name||'',sourceUrl:meta.sourceUrl||''});return this.insertStoredImage(assetId,x,y,meta,dimensions);
     }
 
-    savePreferences(){return this.storageSet({[this.PREF_KEY]:{theme:this.theme,grid:this.gridType,mindStyle:this.currentMindStyle,snapToGrid:this.snapToGrid,aiProvider:this.aiProvider}});}
+    savePreferences(){return this.storageSet({[this.PREF_KEY]:{theme:this.theme,grid:this.gridType,mindStyle:this.currentMindStyle,snapToGrid:this.snapToGrid,aiProvider:this.aiProvider,aiDiagramType:this.aiDiagramType}});}
 
     toggleMindCollapse(){const node=this.getMindFocus();if(!node){this.toast('请先选择一个思维导图节点。');return;}node.collapsed=!node.collapsed;this.setSelection([node],false);this.commit();this.render();this.toast(node.collapsed?'分支已折叠。':'分支已展开。');}
 
@@ -2082,7 +2387,24 @@
       $('#mermaid-dialog').addEventListener('pointerdown',e=>{if(e.target===$('#mermaid-dialog'))this.closeMermaidDialog();});
       $('#mermaid-input').addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();this.closeMermaidDialog();}else if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();this.generateMermaidFromInput();}});
       $('#btn-menu').addEventListener('click',e=>{e.stopPropagation();toggle('#menu-popover');});
-      $('#btn-ai-pending').addEventListener('click',()=>this.openAIMindmapDialog(true));
+      $('#btn-help').addEventListener('click',()=>{this.closePopovers();chrome.tabs.create({url:chrome.runtime.getURL('help.html')});});
+      $('#btn-check-update').addEventListener('click',async()=>{
+        const button=$('#btn-check-update'),status=$('#update-status');
+        if(this.availableUpdate){
+          await chrome.tabs.create({url:this.availableUpdate.downloadUrl||this.availableUpdate.releaseUrl});
+          this.toast('下载后解压覆盖原扩展目录，再在扩展管理页重新加载。更新前可导出项目备份。');return;
+        }
+        button.disabled=true;status.textContent='检查中…';
+        try{
+          const allowed=await chrome.permissions.request({origins:['https://api.github.com/*']});
+          if(!allowed){status.textContent='未授予权限';return;}
+          const result=await globalThis.QuickdrawUpdates.check(chrome.runtime.getManifest().version);
+          if(result.available){this.availableUpdate=result;status.textContent=`下载 v${result.version} ↗`;button.title='点击下载新版，解压覆盖原目录后重新加载扩展';}
+          else status.textContent='已是最新版本';
+        }catch(error){status.textContent='检查失败，可重试';this.toast(error?.message||'无法连接 GitHub，请稍后重试。');}
+        finally{button.disabled=false;}
+      });
+      $('#btn-project-github').addEventListener('click',()=>{this.closePopovers();chrome.tabs.create({url:'https://github.com/baize7815/quickdraw-sidepanel'});});
       $('#btn-arrange').addEventListener('click',e=>{e.stopPropagation();toggle('#arrange-popover');});
       $$('.popover').forEach(p=>p.addEventListener('click',e=>e.stopPropagation()));
       document.addEventListener('pointerdown',e=>{if(!e.target.closest('.popover,.tool-btn,#files-btn'))this.closePopovers();});
@@ -2150,7 +2472,6 @@
       $$('#grid-control button').forEach(b=>b.addEventListener('click',()=>{this.gridType=b.dataset.grid;this.syncGridUI();this.savePreferences();this.render();}));
       $$('#theme-control button').forEach(b=>b.addEventListener('click',()=>{this.theme=b.dataset.theme;this.applyTheme();this.savePreferences();this.render();}));
       $$('#snap-control button').forEach(b=>b.addEventListener('click',()=>{this.snapToGrid=b.dataset.enabled==='true';this.syncPreferenceUI();this.savePreferences();}));
-      $('#ai-provider-select').addEventListener('change',e=>this.setAIProvider(e.target.value));
       this.updateMindStyleUI();
       this.syncPreferenceUI();
       for(const dialog of $$('.confirm-backdrop,.mermaid-backdrop,.ai-backdrop'))dialog.addEventListener('keydown',e=>this.trapDialogFocus(dialog,e));
@@ -2179,6 +2500,7 @@
       $('#ai-mindmap-submit').addEventListener('click',()=>this.submitAIMindmap());
       $('#ai-open-provider').addEventListener('click',()=>this.openProviderTab());
       $('#ai-task-provider')?.addEventListener('change',event=>{this.setAIProvider(event.target.value);this.syncAIModeUI();});
+      $('#ai-diagram-preset')?.addEventListener('change',event=>this.setAIDiagramType(event.target.value));
       $('#ai-image-preset')?.addEventListener('change',event=>this.applyAIImagePreset(event.target.value));
       $('#ai-mindmap-input').addEventListener('input',()=>this.syncAIImagePresetSelection());
       $('#ai-mindmap-input').addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();this.closeAIMindmapDialog();}else if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.submitAIMindmap();}});
@@ -2233,16 +2555,22 @@
 
     setAIProvider(value){
       const selected=globalThis.QuickdrawAI?.provider(value);
-      if(!selected?.enabled){this.aiProvider='gpt';this.toast('当前平台未接入，请选择 GPT、豆包或 Grok。');}
+      if(!selected?.enabled){this.aiProvider='gpt';this.toast('当前平台未接入，请选择 GPT、豆包、Grok 或 Dola。');}
       else this.aiProvider=selected.id;
       this.syncAIProviderUI();
       this.syncAIModeUI?.();
       this.savePreferences();
     }
 
+    setAIDiagramType(value){
+      this.aiDiagramType=globalThis.QuickdrawAI?.normalizeDiagramType?.(value)||'flowchart';
+      const select=$('#ai-diagram-preset');if(select)select.value=this.aiDiagramType;
+      this.syncAIModeUI?.();
+      this.savePreferences();
+    }
+
     syncAIProviderUI(){
-      const select=$('#ai-provider-select'),taskSelect=$('#ai-task-provider');
-      if(select)select.value=this.aiProvider||'gpt';
+      const taskSelect=$('#ai-task-provider');
       if(taskSelect)taskSelect.value=this.aiProvider||'gpt';
     }
 
@@ -2250,25 +2578,28 @@
       const image=this.aiDialogMode==='image-edit';
       const detailTask=!this.aiImageSelection&&this.aiCurrentTaskId?(this.aiTasks||[]).find(task=>task.taskId===this.aiCurrentTaskId)||(this.aiProgressTask?.taskId===this.aiCurrentTaskId?this.aiProgressTask:null):null;
       const hasInputImages=image&&!!(this.aiImageSelection?.units?.length||detailTask?.inputAssets?.length||detailTask?.inputAssetIds?.length||detailTask?.inputAssetId);
-      const title=$('#ai-mindmap-dialog-title'),input=$('#ai-mindmap-input'),submit=$('#ai-mindmap-submit'),hint=$('.ai-dialog-hint'),presetField=$('#ai-image-preset-field'),preset=$('#ai-image-preset');
+      const title=$('#ai-mindmap-dialog-title'),input=$('#ai-mindmap-input'),submit=$('#ai-mindmap-submit'),hint=$('.ai-dialog-hint'),presetField=$('#ai-image-preset-field'),preset=$('#ai-image-preset'),diagramField=$('#ai-diagram-preset-field'),diagramPreset=$('#ai-diagram-preset');
       const provider=globalThis.QuickdrawAI?.provider(this.aiProvider||'gpt'),label=provider?.label||'GPT';
-      if(title)title.textContent=image?`AI 图片编辑（${label}）`:`AI 脑图（${label}）`;
-       if(input)input.placeholder=image?(hasInputImages?'例如：把背景改成浅蓝色，并保留主体轮廓（可不填）':'例如：一只戴宇航员头盔的猫，电影质感'):'例如：做一个外卖系统的开发架构交互流程图';
+      const diagramNames={flowchart:'Flowchart 流程图',sequence:'Sequence Diagram 时序图',state:'State Diagram 状态图',gantt:'Gantt 甘特图',class:'Class Diagram 类图'};
+      if(title)title.textContent=image?`AI 图片编辑（${label}）`:`AI Mermaid（${label}）`;
+      if(input)input.placeholder=image?(hasInputImages?'例如：把背景改成浅蓝色，并保留主体轮廓（可不填）':'例如：一只戴宇航员头盔的猫，电影质感'):`描述你要生成的${diagramNames[this.aiDiagramType]||'Mermaid 图表'}，例如：外卖系统的登录与下单流程`;
       if(presetField)presetField.hidden=!image;
+      if(diagramField)diagramField.hidden=image;
+      if(diagramPreset&&!image)diagramPreset.value=this.aiDiagramType||'flowchart';
       if(preset&&!image)preset.value='';
       const open=$('#ai-open-provider');if(open)open.textContent=`打开${label}`;
       if(submit)submit.textContent=image?(hasInputImages?`使用${label}生成图片`:`使用${label}文生图`):`发送到${label}`;
-      const pageHint=this.aiProvider==='doubao'?'豆包任务会自动打开并切到专用标签页，请保持该页可见直到完成。':`${label} 会在同一浏览器配置的专用标签页中处理。`;
-      if(hint)hint.textContent=image?(hasInputImages?`${pageHint}图片编辑需求可不填。首次图片任务会申请已知必要权限，遇到新的结果图片网站时才会另行请求。`:`${pageHint}当前未选择图片，将按文字生成图片；请输入生成描述。首次图片任务会申请已知必要权限，遇到新的结果图片网站时才会另行请求。`):`${pageHint}首次使用需要授予${label}网站权限。未确认发送时不会自动重试。`;
+      const pageHint=(this.aiProvider==='doubao'||this.aiProvider==='dola')?`${label}任务会自动打开并切到专用标签页，请保持该页可见直到完成。`:`${label} 会在同一浏览器配置的专用标签页中处理。`;
+      if(hint)hint.textContent=image?(hasInputImages?`${pageHint}图片编辑需求可不填。首次图片任务会申请已知必要权限，遇到新的结果图片网站时才会另行请求。`:`${pageHint}当前未选择图片，将按文字生成图片；请输入生成描述。首次图片任务会申请已知必要权限，遇到新的结果图片网站时才会另行请求。`):`${pageHint}将按“${diagramNames[this.aiDiagramType]||'Flowchart 流程图'}”预设发送 Mermaid 生成要求；确认对话发送成功后任务即结束，不再读取或导入回复，标签页保持打开。`;
     }
 
     aiTaskStatusLabel(status,task=null){
       const label=globalThis.QuickdrawAI?.provider(task?.provider||this.aiProvider)?.label||'AI';
       const stageLabels={queued:'排队中','page-loading':`打开${label}`,hydrating:`等待${label}页面`,uploading:'上传图片',sending:'发送中',generating:'生成中',returning:'接收回复'};
-      if(status==='paused'&&task?.pauseReason==='raw-image-unavailable')return '等待读取豆包原图';
+      if(status==='paused'&&task?.pauseReason==='raw-image-unavailable')return `等待读取${label}无水印原图`;
       if(status==='paused'&&task?.pauseReason==='conversation-conflict')return '已暂停（需确认会话）';
       if(task?.status!=='paused'&&task?.stage&&globalThis.QuickdrawAI?.isActiveTask(task)&&stageLabels[task.stage])return stageLabels[task.stage];
-      return ({queued:'排队中',connecting:`连接${label}`,sending:'发送中',waiting:`等待${label}回复`,validating:'校验中',ready:'待导入',pending:'待导入','image-ready':'图片待插入','pending-image':'等待图片权限',importing:'导入中',paused:'已暂停（需登录/验证）',imported:'已导入',failed:'失败','needs-attention':'需要处理',cancelled:'已取消'}[status]||'未知状态');
+      return ({queued:'排队中',connecting:`连接${label}`,sending:'发送中',waiting:`等待${label}回复`,validating:'校验中',ready:'待导入',pending:'待导入','image-ready':'图片待插入','pending-image':'等待图片权限',importing:'导入中',paused:'已暂停（需登录/验证）',sent:'已发送',imported:'已导入',failed:'失败','needs-attention':'需要处理',cancelled:'已取消'}[status]||'未知状态');
     }
 
     async refreshAITasks(){
@@ -2292,7 +2623,7 @@
       }
       if(task.taskId===this.aiCurrentTaskId||task.taskId===this.aiProgressTask?.taskId||globalThis.QuickdrawAI?.isActiveTask(task))this.aiProgressTask=task;
       const index=this.aiTasks.findIndex(item=>item.taskId===task.taskId);
-      const finished=['imported','failed','needs-attention','cancelled'].includes(task.status);
+      const finished=['sent','imported','failed','needs-attention','cancelled'].includes(task.status);
       if(finished){if(index>=0)this.aiTasks.splice(index,1);}
       else if(index>=0)this.aiTasks[index]=task;else this.aiTasks.unshift(task);
       this.aiTasks.sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0));
@@ -2301,7 +2632,7 @@
       if(['failed','needs-attention','paused'].includes(task.status)&&this.aiCurrentTaskId===task.taskId)this.showAITaskError(task.error||`${globalThis.QuickdrawAI?.provider(task.provider||this.aiProvider)?.label||'AI'} 任务需要处理。`);
       if(this.aiCurrentTaskId===task.taskId){const status=$('#ai-task-status');if(status)status.textContent=this.aiTaskStatusLabel(task.status,task);}
       this.syncAITaskControls();
-      if(task.status==='imported'||task.status==='cancelled')this.aiProgressTask=null;
+      if(['sent','imported','cancelled'].includes(task.status))this.aiProgressTask=null;
       this.renderAIProgress();
     }
 
@@ -2326,8 +2657,6 @@
         if(receipt&&task.status!=='imported'){const button=document.createElement('button');button.type='button';button.textContent='确认已写入';button.addEventListener('click',()=>this.ackAIReceipt(task));row.append(button);}
         root.append(row);
       }
-      const menuStatus=$('#ai-menu-status');
-      if(menuStatus){menuStatus.textContent=tasks.length?`${tasks.length} 项`:'无';}
     }
 
     openAIMindmapDialog(showPending=false){
@@ -2411,7 +2740,7 @@
 
     renderAIProgress(){
       const root=$('#ai-task-flyout'),task=this.aiProgressTask;
-      if(!root||!task||this.aiDismissedTaskIds.has(task.taskId)||['imported','cancelled'].includes(task.status)){if(root)root.hidden=true;return;}
+      if(!root||!task||this.aiDismissedTaskIds.has(task.taskId)||['sent','imported','cancelled'].includes(task.status)){if(root)root.hidden=true;return;}
       const provider=globalThis.QuickdrawAI?.provider(task.provider||this.aiProvider),label=provider?.label||'AI';
       const active=!!globalThis.QuickdrawAI?.isActiveTask(task),stage=this.aiTaskStatusLabel(task.status,task);
       const heading=$('#ai-task-flyout-provider'),stageNode=$('#ai-task-flyout-stage'),text=$('#ai-task-flyout-text'),card=$('.ai-task-flyout-card',root),cancel=$('#ai-task-flyout-cancel'),reedit=$('#ai-task-flyout-reedit'),dismiss=$('#ai-task-flyout-dismiss');
@@ -2447,7 +2776,9 @@
     openAIProgressDetails(){
       const task=this.aiProgressTask;if(!task)return;
       const dialog=$('#ai-mindmap-dialog');if(!dialog)return;
-      this.closePopovers();this.aiCurrentTaskId=task.taskId;this.aiDialogMode=task.kind==='image-edit'?'image-edit':'mindmap';this.aiImageSelection=null;dialog.hidden=false;this.syncAIProviderUI();this.syncAIModeUI();
+      this.closePopovers();this.aiCurrentTaskId=task.taskId;this.aiDialogMode=task.kind==='image-edit'?'image-edit':'mindmap';this.aiImageSelection=null;
+      if(task.kind!=='image-edit')this.aiDiagramType=globalThis.QuickdrawAI?.normalizeDiagramType?.(task.diagramType)||'flowchart';
+      dialog.hidden=false;this.syncAIProviderUI();this.syncAIModeUI();
       this.resetAIImagePresetUI();const input=$('#ai-mindmap-input');if(input)input.value=task.prompt||'';
       if(task.error)this.showAITaskError(task.error);else this.hideAITaskError();
       const status=$('#ai-task-status');if(status)status.textContent=this.aiTaskStatusLabel(task.status,task);
@@ -2463,6 +2794,7 @@
         if(source.length){this.setSelection(source,false);this.openAIImageDialog();const input=$('#ai-mindmap-input');if(input)input.value=task.prompt||'';return;}
         this.openAIMindmapDialog();this.showAITaskError('请重新选择图片对象后再开始图片编辑。');return;
       }
+      this.aiDiagramType=globalThis.QuickdrawAI?.normalizeDiagramType?.(task.diagramType)||'flowchart';
       this.openAIMindmapDialog();const input=$('#ai-mindmap-input');if(input)input.value=task.prompt||'';
     }
     async cancelAITask(taskId=this.aiCurrentTaskId){
@@ -2497,6 +2829,10 @@
       const provider=globalThis.QuickdrawAI?.provider(providerId),label=provider?.label||'AI';
       if(!provider?.enabled)return false;
       const origins=[...(provider.origins||[]),...(provider.authOrigins||[]),...(image?(provider.imageOrigins||[]):[])];
+      if(/Edg\//.test(globalThis.navigator?.userAgent||'')){
+        // Request before awaiting contains(), preserving click activation on Edge.
+        try{return await chrome.permissions.request({origins});}catch(error){this.showAITaskError(`无法取得${label}网站权限：${error?.message||'请在扩展权限设置中允许后重试。'}`);return false;}
+      }
       try{if(await chrome.permissions.contains({origins}))return true;}catch{}
       try{return await chrome.permissions.request({origins});}catch(error){this.showAITaskError(`无法取得${label}网站权限，请在扩展权限设置中允许后重试。`);return false;}
     }
@@ -2547,9 +2883,10 @@
        if(!(await this.ensureProviderPermission(provider.id)))return;
         if(this.boardLoading||this.currentFileId!==boardId||this.aiBoardEpoch!==boardEpoch)throw new Error('画板已切换，任务未发送。');
         if(!globalThis.chrome?.runtime?.sendMessage)throw new Error('当前环境无法连接扩展后台。');
-        const response=await chrome.runtime.sendMessage({type:'qd-ai-submit',payload:{provider:provider.id,kind:'mindmap',prompt,boardId,sourceWindowId:this.windowId,sourceInstanceId:this.instanceId,sourceBoardEpoch:boardEpoch,sourceRevision}});
+        const diagramType=globalThis.QuickdrawAI?.normalizeDiagramType?.(this.aiDiagramType)||'flowchart';
+        const response=await chrome.runtime.sendMessage({type:'qd-ai-submit',payload:{provider:provider.id,kind:'mindmap',diagramType,prompt,boardId,sourceWindowId:this.windowId,sourceInstanceId:this.instanceId,sourceBoardEpoch:boardEpoch,sourceRevision}});
         if(!response?.ok)throw new Error(response?.error||'AI 任务提交失败。');
-        this.aiCurrentTaskId=response.taskId;this.aiProgressTask={taskId:response.taskId,provider:provider.id,kind:'mindmap',prompt,status:'queued',stage:'queued'};input.value='';if(status)status.textContent=`已提交，等待${provider.label}回复`;this.hideAIDialogAfterSubmit(response.taskId);this.refreshAITasks().catch(()=>{});
+        this.aiCurrentTaskId=response.taskId;this.aiProgressTask={taskId:response.taskId,provider:provider.id,kind:'mindmap',diagramType,prompt,status:'queued',stage:'queued'};input.value='';if(status)status.textContent=`已提交，等待${provider.label}回复`;this.hideAIDialogAfterSubmit(response.taskId);this.refreshAITasks().catch(()=>{});
       }catch(error){this.showAITaskError(error);if(status)status.textContent='提交失败';}
       finally{this.aiSubmitBusy=false;this.syncAITaskControls();if(submit)submit.disabled=false;}
     }
@@ -2571,7 +2908,7 @@
         const maxImages=Number(provider.maxInputImages||globalThis.QuickdrawAI?.MAX_INPUT_IMAGES||4);
         if(units.length>maxImages)throw new Error(`${provider.label} 当前一次最多处理 ${maxImages} 张图片，请减少选区后重试。`);
         for(const unit of units){
-          const blob=await this.createPNGBlob(true,unit.items);
+          const blob=await this.createPNGBlob(true,unit.items,0);
           if(!globalThis.QuickdrawAIImage?.inspectBlob)throw new Error('图片校验不可用。');
           await globalThis.QuickdrawAIImage.inspectBlob(blob,{maxBytes:globalThis.QuickdrawAIImage.MAX_INPUT_BYTES});
           const assetId=await this.store.putAsset(blob,{sourceUrl:'quickdraw-selection',aiInput:true,createdBy:this.instanceId,aiInputOrder:unit.order});
@@ -2629,7 +2966,7 @@
         const checked=globalThis.QuickdrawAI.validateMermaid(task.validatedMermaid||task.rawReply);
         if(!checked.ok)throw new Error(`Mermaid 校验失败：${checked.error}`);
         const parsed=checked.parsed;
-        const layout=this.layoutMermaidFlowchart(parsed);if(!layout?.nodes?.length)throw new Error('流程图没有可导入节点。');
+        const layout=this.layoutMermaidDiagram(parsed);if(!layout?.nodes?.length)throw new Error('Mermaid 图表没有可导入节点。');
         if(this.boardLoading||this.currentFileId!==targetBoardId||this.aiBoardEpoch!==targetEpoch)throw new Error('画板已切换，结果已保留在待导入任务中。');
         this.aiTaskReceipts.set(task.taskId,{taskId:task.taskId,boardId:targetBoardId,ownerId:this.instanceId,mermaidHash:QDCore.hashString(checked.source),createdAt:Date.now()});
         this.elements.push(...layout.nodes);this.elements.unshift(...layout.edges);this.setSelection(layout.nodes,false);this.commit();this.render();applied=true;
@@ -2637,7 +2974,7 @@
         committed=true;
         const marked=await chrome.runtime.sendMessage({type:'qd-ai-mark-imported',taskId:task.taskId,ownerId:this.instanceId,targetBoardId:savedBoardId});
         if(!marked?.ok){this.toast('脑图已写入当前画板，但任务状态同步失败，请不要重复导入。');return;}
-        this.onAITaskUpdated(marked.task);this.toast(`已导入 ${layout.nodes.length} 个节点、${layout.edges.length} 条连线，可撤销。`);
+        this.onAITaskUpdated(marked.task);this.toast(`已导入 ${checked.type||'Mermaid'}：${layout.nodes.length} 个节点、${layout.edges.length} 条连线，可撤销。`);
       }catch(error){
         this.showAITaskError(error);
         // Keep the applied edit on save failure; undo could erase a later user edit.
@@ -2757,7 +3094,7 @@
       const n=v=>this.svgNum(v),esc=v=>this.xmlEscape(v),out=[],paper=this.theme==='dark'?'#191713':'#F9FAFB';
       for(const edge of items){
         if(edge.type!=='mindedge'||!this.isElementVisible(edge))continue;const pts=this.mindEdgeSamplePoints(edge);if(pts.length<2)continue;const stroke=edge.color||(this.theme==='dark'?'#9aa3ad':'#7d8794'),d=pts.map((p,i)=>`${i?'L':'M'} ${n(p.x)} ${n(p.y)}`).join(' ');
-        out.push(`<path d="${d}" fill="none" stroke="${esc(stroke)}" stroke-width="${n(edge.size||1.6)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+        out.push(`<path d="${d}" fill="none" stroke="${esc(stroke)}" stroke-width="${n(edge.size||1.6)}" stroke-linecap="round" stroke-linejoin="round"${edge.dashed?' stroke-dasharray="6 5"':''}/>`);
         if(edge.arrow){let i=pts.length-2;while(i>0&&Math.hypot(pts.at(-1).x-pts[i].x,pts.at(-1).y-pts[i].y)<.01)i--;const a=pts[i],b=pts.at(-1),ang=Math.atan2(b.y-a.y,b.x-a.x),len=10,a1={x:b.x-len*Math.cos(ang-.55),y:b.y-len*Math.sin(ang-.55)},a2={x:b.x-len*Math.cos(ang+.55),y:b.y-len*Math.sin(ang+.55)};out.push(`<path d="M ${n(a1.x)} ${n(a1.y)} L ${n(b.x)} ${n(b.y)} L ${n(a2.x)} ${n(a2.y)}" fill="none" stroke="${esc(stroke)}" stroke-width="${n(edge.size||1.6)}" stroke-linecap="round" stroke-linejoin="round"/>`);}
         if(edge.label){const q=this.mindEdgeLabelPoint(edge,pts),text=String(edge.label),w=Math.max(22,text.length*12+10),h=20;out.push(`<rect x="${n(q.x-w/2)}" y="${n(q.y-h/2)}" width="${n(w)}" height="${n(h)}" rx="4" fill="${paper}"/><text x="${n(q.x)}" y="${n(q.y)}" text-anchor="middle" dominant-baseline="middle" fill="${this.theme==='dark'?'#e5e7eb':'#4b5563'}" font-size="12" font-family="Arial,Helvetica,sans-serif">${esc(text)}</text>`);}
       }
@@ -2789,13 +3126,23 @@
       if(['rect','ellipse','triangle','diamond','hexagon','star','cloud'].includes(el.type))return this.svgShapeMarkup(el);
       if(el.type==='text')return this.svgTextMarkup(el);
       if(el.type==='mindnode'){
-        const w=el.w||150,h=el.h||44,fs=el.fontSize||15,isRoot=!el.parentId&&!el.mermaid,bg=el.bgColor||(this.theme==='dark'?(isRoot?'#34302a':'#24211d'):(isRoot?'#fffdf8':'#ffffff')),bgOpacity=el.bgOpacity==null?1:clamp(Number(el.bgOpacity),0,1),stroke=el.color||(this.theme==='dark'?'#d8d3ca':'#5d5952'),shape=el.nodeShape||'rounded';
+        const w=el.w||150,h=el.h||44,fs=el.fontSize||15,isRoot=!el.parentId&&!el.mermaid,bg=el.bgColor||(this.theme==='dark'?(isRoot?'#34302a':'#24211d'):(isRoot?'#fffdf8':'#ffffff')),bgOpacity=el.bgOpacity==null?1:clamp(Number(el.bgOpacity),0,1),stroke=el.color||(this.theme==='dark'?'#d8d3ca':'#5d5952'),fg=el.textColor||(this.theme==='dark'?'#ffffff':'#292722'),shape=el.nodeShape||'rounded';
+        if(el.mermaidRole==='state-start')return `<circle cx="${n(el.x+w/2)}" cy="${n(el.y+h/2)}" r="${n(Math.min(w,h)/2)}" fill="${esc(stroke)}"/>`;
+        if(el.mermaidRole==='state-end'){
+          const r=Math.min(w,h)/2,inner=Math.max(3,r-5);
+          return `<g><circle cx="${n(el.x+w/2)}" cy="${n(el.y+h/2)}" r="${n(r)}" fill="${esc(bg)}" stroke="${esc(stroke)}" stroke-width="1.6"/><circle cx="${n(el.x+w/2)}" cy="${n(el.y+h/2)}" r="${n(inner)}" fill="${esc(stroke)}"/></g>`;
+        }
+        if(el.mermaidType==='class'){
+          const rawLines=String(el.text||'').split('\n'),title=rawLines[0]||'',members=rawLines.slice(1),titleH=38,lineH=22;
+          const memberMarkup=members.map((line,i)=>`<text x="${n(el.x+12)}" y="${n(el.y+titleH+16+i*lineH)}" fill="${esc(fg)}" font-size="${n(Math.max(12,fs-1))}" font-family="ui-monospace,Consolas,monospace">${esc(line||' ')}</text>`).join('');
+          return `<g><rect x="${n(el.x)}" y="${n(el.y)}" width="${n(w)}" height="${n(h)}" rx="4" fill="${esc(bg)}" fill-opacity="${n(Number.isFinite(bgOpacity)?bgOpacity:1)}" stroke="${esc(stroke)}" stroke-width="1.35"/>${members.length?`<line x1="${n(el.x)}" y1="${n(el.y+titleH)}" x2="${n(el.x+w)}" y2="${n(el.y+titleH)}" stroke="${esc(stroke)}" stroke-width="1.1"/>`:''}<text x="${n(el.x+w/2)}" y="${n(el.y+titleH/2)}" text-anchor="middle" dominant-baseline="middle" fill="${esc(fg)}" font-size="${n(fs)}" font-weight="600" font-family="Arial,Helvetica,sans-serif">${esc(title||' ')}</text>${memberMarkup}</g>`;
+        }
         this.ctx.save();this.ctx.font=`${isRoot?600:500} ${fs}px ui-sans-serif,system-ui,sans-serif`;const lines=this.getMindNodeLines(this.ctx,el.text||'',Math.max(36,w-(shape==='diamond'?42:24)));this.ctx.restore();const lh=fs*1.3,start=el.y+h/2-(lines.length-1)*lh/2;
         let nodeMarkup='';
         if(shape==='diamond')nodeMarkup=`<path d="M ${n(el.x+w/2)} ${n(el.y)} L ${n(el.x+w)} ${n(el.y+h/2)} L ${n(el.x+w/2)} ${n(el.y+h)} L ${n(el.x)} ${n(el.y+h/2)} Z" fill="${esc(bg)}" fill-opacity="${n(Number.isFinite(bgOpacity)?bgOpacity:1)}" stroke="${esc(stroke)}" stroke-width="${isRoot?'2':'1.35'}"/>`;
         else if(shape==='ellipse')nodeMarkup=`<ellipse cx="${n(el.x+w/2)}" cy="${n(el.y+h/2)}" rx="${n(w/2)}" ry="${n(h/2)}" fill="${esc(bg)}" fill-opacity="${n(Number.isFinite(bgOpacity)?bgOpacity:1)}" stroke="${esc(stroke)}" stroke-width="${isRoot?'2':'1.35'}"/>`;
         else nodeMarkup=`<rect x="${n(el.x)}" y="${n(el.y)}" width="${n(w)}" height="${n(h)}" rx="${n(shape==='pill'?h/2:shape==='rect'?4:Math.min(10,h/2))}" fill="${esc(bg)}" fill-opacity="${n(Number.isFinite(bgOpacity)?bgOpacity:1)}" stroke="${esc(stroke)}" stroke-width="${isRoot?'2':'1.35'}"/>`;
-        return `<g>${nodeMarkup}<text text-anchor="middle" dominant-baseline="middle" fill="${esc(el.textColor||(this.theme==='dark'?'#ffffff':'#292722'))}" font-size="${n(fs)}" font-weight="${isRoot?'600':'500'}" font-family="Arial,Helvetica,sans-serif">${lines.map((line,i)=>`<tspan x="${n(el.x+w/2)}" y="${n(start+i*lh)}">${esc(line||' ')}</tspan>`).join('')}</text></g>`;
+        return `<g>${nodeMarkup}<text text-anchor="middle" dominant-baseline="middle" fill="${esc(fg)}" font-size="${n(fs)}" font-weight="${isRoot?'600':'500'}" font-family="Arial,Helvetica,sans-serif">${lines.map((line,i)=>`<tspan x="${n(el.x+w/2)}" y="${n(start+i*lh)}">${esc(line||' ')}</tspan>`).join('')}</text></g>`;
       }
       if(el.type==='note'){
         return this.svgMarkdownNoteMarkup(el);
@@ -2808,7 +3155,7 @@
       const items=this.exportElementsFor(requested);if(requested&&!items.length)throw new Error('empty-export');
       await this.waitForImages(items);
       this.exportAssetData=new Map();for(const el of items.filter(item=>item.type==='image'&&item.assetId)){const asset=await this.store.getAsset(el.assetId);if(asset?.blob)this.exportAssetData.set(el.assetId,await this.store.blobToDataUrl(asset.blob));}
-      const b=this.getElementsBBox(items)||{x:(-this.offsetX)/this.scale,y:(-this.offsetY)/this.scale,w:this.width/this.scale,h:this.height/this.scale},pad=32,x=b.x-pad,y=b.y-pad,w=Math.max(1,b.w+pad*2),h=Math.max(1,b.h+pad*2),paper=this.theme==='dark'?'#191713':'#F9FAFB';
+      const b=this.getElementsBBox(items)||{x:(-this.offsetX)/this.scale,y:(-this.offsetY)/this.scale,w:this.width/this.scale,h:this.height/this.scale},pad=0,x=b.x-pad,y=b.y-pad,w=Math.max(1,b.w+pad*2),h=Math.max(1,b.h+pad*2),paper=this.theme==='dark'?'#191713':'#F9FAFB';
       const patternColors=[...new Set(items.filter(el=>el.fill==='pattern').map(el=>el.color||this.currentColor))],defs=`<defs>${patternColors.map(color=>`<pattern id="${this.patternId(color)}" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="${this.xmlEscape(color)}" stroke-width="1.2" opacity=".35"/></pattern>`).join('')}</defs>`;
       const background=transparent?'':`<rect x="${this.svgNum(x)}" y="${this.svgNum(y)}" width="${this.svgNum(w)}" height="${this.svgNum(h)}" fill="${paper}"/>`;
       const body=this.svgMindConnectionsMarkup(items)+items.map(el=>this.svgElementMarkup(el)).join('');
@@ -2858,7 +3205,7 @@
 
     async waitForImages(items=this.elements){await Promise.all(items.filter(e=>e.type==='image').map(e=>new Promise(resolve=>{const img=this.getCachedImage(e);if(img?.complete&&img.naturalWidth)return resolve();const done=()=>resolve();img?.addEventListener('load',done,{once:true});img?.addEventListener('error',done,{once:true});setTimeout(done,2000);})));}
 
-    async createPNGBlob(transparent=false,requested=null,padding=32){
+    async createPNGBlob(transparent=false,requested=null,padding=8){
       const items=this.exportElementsFor(requested);if(!items.length)throw new Error('empty-export');await this.waitForImages(items);this.exporting=true;
       try{const b=this.getElementsBBox(items)||{x:(-this.offsetX)/this.scale,y:(-this.offsetY)/this.scale,w:this.width/this.scale,h:this.height/this.scale},pad=padding,scale=2,width=Math.ceil((b.w+pad*2)*scale),height=Math.ceil((b.h+pad*2)*scale);if(width>32767||height>32767||width*height>120_000_000)throw new Error('canvas-too-large');const c=document.createElement('canvas');c.width=width;c.height=height;const ctx=c.getContext('2d');if(!ctx)throw new Error('canvas-unavailable');if(!transparent){ctx.fillStyle=this.theme==='dark'?'#191713':'#F9FAFB';ctx.fillRect(0,0,c.width,c.height);}ctx.save();ctx.scale(scale,scale);ctx.translate(-b.x+pad,-b.y+pad);for(const edge of items)if(edge.type==='mindedge')this.drawMindEdge(ctx,edge,false);for(const el of items)if(el.type!=='mindedge')this.drawElement(ctx,el);ctx.restore();return await new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error('png-encode-failed')),'image/png'));}finally{this.exporting=false;}
     }

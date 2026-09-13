@@ -23,6 +23,11 @@
   const DOUBAO_IMAGE_ORIGINS = Object.freeze(['https://*.doubao.com/*', 'https://*.byteimg.com/*']);
   const GROK_ORIGINS = Object.freeze(['https://grok.com/*']);
   const GROK_AUTH_ORIGINS = Object.freeze(['https://accounts.x.ai/*']);
+  const DOLA_ORIGINS = Object.freeze(['https://www.dola.com/*', 'https://dola.com/*']);
+  // Result images may be served from a Dola-owned CDN host that is only known
+  // at reply time; getOutputPermissionOrigins() still requests the exact reply
+  // origin on demand, so this list only covers the known first-party hosts.
+  const DOLA_IMAGE_ORIGINS = Object.freeze(['https://www.dola.com/*', 'https://*.dola.com/*']);
   const STAGES = Object.freeze({
     queued: Object.freeze({ timeout: 30_000, order: 0 }),
     'page-loading': Object.freeze({ timeout: 120_000, order: 1 }),
@@ -64,6 +69,16 @@
       imageOrigins: Object.freeze([]),
       maxInputImages: MAX_INPUT_IMAGES
     }),
+    dola: Object.freeze({
+      id: 'dola',
+      label: 'Dola',
+      enabled: true,
+      capabilities: Object.freeze({ text: false, mermaid: false, image: true }),
+      origins: DOLA_ORIGINS,
+      authOrigins: Object.freeze([]),
+      imageOrigins: DOLA_IMAGE_ORIGINS,
+      maxInputImages: MAX_INPUT_IMAGES
+    }),
     deepseek: Object.freeze({
       id: 'deepseek',
       label: 'DeepSeek',
@@ -74,7 +89,7 @@
   });
 
   const ACTIVE_STATUSES = new Set(['queued', 'connecting', 'sending', 'waiting', 'validating', 'importing', 'paused']);
-  const FINAL_STATUSES = new Set(['imported', 'failed', 'needs-attention', 'cancelled']);
+  const FINAL_STATUSES = new Set(['sent', 'imported', 'failed', 'needs-attention', 'cancelled']);
 
   function randomId(prefix = 'ai') {
     try {
@@ -108,20 +123,48 @@
     } catch { return false; }
   }
 
+  const DIAGRAM_TYPES = Object.freeze(['flowchart', 'sequence', 'state', 'gantt', 'class']);
+
+  function normalizeDiagramType(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (['sequence', 'sequencediagram', 'sequence-diagram'].includes(raw)) return 'sequence';
+    if (['state', 'statediagram', 'state-diagram', 'statediagram-v2'].includes(raw)) return 'state';
+    if (['gantt', 'ganttchart', 'gantt-chart'].includes(raw)) return 'gantt';
+    if (['class', 'classdiagram', 'class-diagram'].includes(raw)) return 'class';
+    return 'flowchart';
+  }
+
+  function mermaidHeaderType(value) {
+    const source = String(value || '').replace(/^\uFEFF/, '').trimStart();
+    if (/^(?:flowchart|graph)\s+(?:TD|TB|BT|LR|RL)\b/i.test(source)) return 'flowchart';
+    if (/^sequenceDiagram\b/i.test(source)) return 'sequence';
+    if (/^stateDiagram(?:-v2)?\b/i.test(source)) return 'state';
+    if (/^gantt\b/i.test(source)) return 'gantt';
+    if (/^classDiagram\b/i.test(source)) return 'class';
+    return '';
+  }
+
   function normalizeMermaidResponse(value) {
-    const raw = String(value ?? '').trim();
-    if (!raw) throw new Error('GPT 没有返回 Mermaid 内容。');
-    const matches = [...raw.matchAll(/```([^\n`]*)\n([\s\S]*?)```/g)];
-    if (matches.length) {
-      if (matches.length !== 1) throw new Error('GPT 返回了多个代码块。');
-      const match = matches[0];
-      const before = raw.slice(0, match.index).trim();
-      const after = raw.slice(match.index + match[0].length).trim();
-      const info = String(match[1] || '').trim().toLowerCase();
-      if (before || after || (info && info !== 'mermaid')) throw new Error('Mermaid 代码块外存在无法确认的文字。');
-      return match[2].trim();
+    const raw = String(value ?? '').replace(/\u200b/g, '').trim();
+    if (!raw) throw new Error('AI 没有返回 Mermaid 内容。');
+    const fenced = [...raw.matchAll(/```([^\n`]*)\n([\s\S]*?)```/g)];
+    if (fenced.length) {
+      const supported = fenced.map(match => ({
+        info: String(match[1] || '').trim().toLowerCase(),
+        source: String(match[2] || '').trim()
+      })).filter(item => mermaidHeaderType(item.source));
+      if (supported.length > 1) throw new Error('AI 返回了多个 Mermaid 图表代码块。');
+      if (supported.length === 1) return supported[0].source;
+      const mermaidBlocks = fenced.filter(match => String(match[1] || '').trim().toLowerCase() === 'mermaid');
+      if (mermaidBlocks.length === 1) return String(mermaidBlocks[0][2] || '').trim();
+      throw new Error('没有找到可识别的 Mermaid 代码块。');
     }
     if (raw.includes('```')) throw new Error('Mermaid 代码围栏不完整。');
+    const header = raw.match(/(?:^|\n)\s*((?:flowchart|graph)\s+(?:TD|TB|BT|LR|RL)\b|sequenceDiagram\b|stateDiagram(?:-v2)?\b|gantt\b|classDiagram\b)/i);
+    if (header && header.index != null) {
+      const offset = header.index + header[0].indexOf(header[1]);
+      return raw.slice(offset).trim();
+    }
     return raw;
   }
 
@@ -129,6 +172,13 @@
     let text = String(value ?? '').trim();
     if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) text = text.slice(1, -1);
     return text.replace(/\\"/g, '"').replace(/<br\s*\/?>/gi, '\n').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  }
+
+  function boundedLabel(value, fallback = '') {
+    const text = cleanLabel(value || fallback);
+    if (!text) return String(fallback || '');
+    if (text.length > MAX_LABEL_LENGTH) throw new Error(`标签长度不能超过 ${MAX_LABEL_LENGTH}。`);
+    return text;
   }
 
   function parseNodeToken(token) {
@@ -148,39 +198,43 @@
     for (const [pattern, shape] of patterns) {
       const found = tail.match(pattern);
       if (!found) continue;
-      const text = cleanLabel(found[1]);
-      if (!text || text.length > MAX_LABEL_LENGTH || /[\r\n;\[\]{}()|]/.test(text) || /%%|-->|[<>]/.test(text)) return null;
+      const text = boundedLabel(found[1], id);
       return { id, text, shape, explicit: true };
     }
     return null;
   }
 
-  function parseSubset(source) {
-    const lines = source.replace(/\r/g, '').split('\n').map(line => line.trim()).filter(Boolean);
+  function sourceLines(source) {
+    return String(source || '').replace(/\r/g, '').split('\n').map(line => line.trim()).filter(Boolean);
+  }
+
+  function parseFlowchart(source) {
+    const lines = sourceLines(source);
     if (!lines.length) throw new Error('Mermaid 内容为空。');
-    const header = lines.shift().match(/^flowchart\s+(TD|TB|BT|LR|RL)$/i);
-    if (!header) throw new Error('只支持 flowchart TD/TB/BT/LR/RL。');
+    const header = lines.shift().match(/^(?:flowchart|graph)\s+(TD|TB|BT|LR|RL)$/i);
+    if (!header) throw new Error('流程图必须以 flowchart TD/TB/BT/LR/RL 开头。');
     if (lines.length > MAX_MERMAID_LINES) throw new Error(`Mermaid 行数不能超过 ${MAX_MERMAID_LINES}。`);
     const nodes = new Map();
     const edges = [];
     const remember = token => {
       const parsed = parseNodeToken(token);
-      if (!parsed) throw new Error('发现不支持的节点语法。');
+      if (!parsed) throw new Error(`发现不支持的流程图节点语法：${String(token || '').slice(0, 80)}`);
       const previous = nodes.get(parsed.id);
       if (previous && parsed.explicit && previous.explicit && (previous.text !== parsed.text || previous.shape !== parsed.shape)) throw new Error(`节点 ${parsed.id} 的定义不一致。`);
       if (!previous || parsed.explicit) nodes.set(parsed.id, parsed);
       if (nodes.size > MAX_MERMAID_NODES) throw new Error(`节点数量不能超过 ${MAX_MERMAID_NODES}。`);
       return parsed;
     };
-    for (const line of lines) {
-      if (/^(?:%%|subgraph\b|end\b|classDef\b|class\b|style\b|linkStyle\b|click\b|sequenceDiagram\b|mindmap\b)/i.test(line)) throw new Error('返回包含未支持的 Mermaid 语法。');
-      if (/-->[\s\S]*-->|<-|---|-\.-|===/.test(line)) throw new Error('不支持链式边或其他边类型。');
+    for (let line of lines) {
+      line = line.replace(/%%.*$/, '').trim();
+      if (!line) continue;
+      if (/^(?:subgraph\b|end\b|classDef\b|class\b|style\b|linkStyle\b|click\b)/i.test(line)) throw new Error('流程图包含当前不支持的高级 Mermaid 语法。');
+      if (/-->[\s\S]*-->/.test(line) || /<-|---|-\.-|===/.test(line)) throw new Error('流程图暂不支持链式边或其他边类型。');
       const edge = line.match(/^([\s\S]*?)\s*-->\s*(?:\|([^|\r\n]*)\|\s*)?([\s\S]*?)\s*;?$/);
       if (edge) {
         const left = remember(edge[1]);
         const right = remember(edge[3]);
-        const label = cleanLabel(edge[2] || '');
-        if (label.length > MAX_LABEL_LENGTH || /[\r\n<>]|%%/.test(label)) throw new Error('边标签过长或包含未支持内容。');
+        const label = boundedLabel(edge[2] || '');
         edges.push({ from: left.id, to: right.id, label });
         if (edges.length > MAX_MERMAID_EDGES) throw new Error(`连线数量不能超过 ${MAX_MERMAID_EDGES}。`);
       } else {
@@ -188,52 +242,288 @@
       }
     }
     if (!nodes.size) throw new Error('Mermaid 流程图没有节点。');
-    return { direction: header[1].toUpperCase(), nodes: [...nodes.values()], edges };
+    return { type: 'flowchart', direction: header[1].toUpperCase(), nodes: [...nodes.values()], edges };
+  }
+
+  function parseSequenceDiagram(source) {
+    const lines = sourceLines(source);
+    if (!/^sequenceDiagram$/i.test(lines.shift() || '')) throw new Error('时序图必须以 sequenceDiagram 开头。');
+    const participants = new Map();
+    const messages = [];
+    let autonumber = false;
+    const remember = (id, label = '') => {
+      const key = String(id || '').trim();
+      if (!/^[A-Za-z_]\w*$/.test(key)) throw new Error(`时序图参与者标识无效：${key}`);
+      const previous = participants.get(key);
+      if (!previous) participants.set(key, { id: key, text: boundedLabel(label || key, key), shape: 'rounded' });
+      else if (label) previous.text = boundedLabel(label, key);
+      if (participants.size > 8) throw new Error('时序图参与者不能超过 8 个。');
+      return participants.get(key);
+    };
+    for (let line of lines) {
+      line = line.replace(/%%.*$/, '').trim();
+      if (!line) continue;
+      if (/^autonumber$/i.test(line)) { autonumber = true; continue; }
+      let match = line.match(/^(participant|actor)\s+([A-Za-z_]\w*)(?:\s+as\s+(.+))?$/i);
+      if (match) { remember(match[2], match[3] || match[2]); continue; }
+      match = line.match(/^([A-Za-z_]\w*)\s*(-->>|->>|-->|->)\s*([A-Za-z_]\w*)\s*:\s*(.+)$/);
+      if (match) {
+        remember(match[1]); remember(match[3]);
+        messages.push({ from: match[1], to: match[3], label: boundedLabel(match[4]), dashed: match[2].startsWith('--') });
+        if (messages.length > 24) throw new Error('时序图消息不能超过 24 条。');
+        continue;
+      }
+      if (/^(?:activate|deactivate|note|loop|alt|else|opt|par|and|rect|critical|break|end)\b/i.test(line)) throw new Error('当前时序图导入暂不支持 loop/alt/note/activate 等高级语法。');
+      throw new Error(`无法识别时序图语法：${line.slice(0, 100)}`);
+    }
+    if (!participants.size) throw new Error('时序图没有参与者。');
+    return { type: 'sequence', direction: 'LR', participants: [...participants.values()], messages, autonumber, nodes: [...participants.values()], edges: messages };
+  }
+
+  function parseStateDiagram(source) {
+    const lines = sourceLines(source);
+    if (!/^stateDiagram(?:-v2)?$/i.test(lines.shift() || '')) throw new Error('状态图必须以 stateDiagram-v2 开头。');
+    const nodes = new Map();
+    const edges = [];
+    let direction = 'TD';
+    let pseudoIndex = 0;
+    const remember = (id, label = '', shape = 'rounded', role = '') => {
+      if (!/^[A-Za-z_][\w-]*$/.test(id)) throw new Error(`状态标识无效：${id}`);
+      const previous = nodes.get(id);
+      if (!previous) nodes.set(id, { id, text: boundedLabel(label || id, id), shape, role });
+      else {
+        if (label) previous.text = boundedLabel(label, id);
+        if (role) previous.role = role;
+      }
+      if (nodes.size > MAX_MERMAID_NODES) throw new Error(`状态数量不能超过 ${MAX_MERMAID_NODES}。`);
+      return nodes.get(id);
+    };
+    const endpoint = (token, side) => {
+      if (token !== '[*]') return remember(token);
+      const id = `__${side}_${++pseudoIndex}`;
+      return remember(id, '', 'ellipse', side === 'start' ? 'state-start' : 'state-end');
+    };
+    for (let line of lines) {
+      line = line.replace(/%%.*$/, '').trim();
+      if (!line) continue;
+      const directionMatch = line.match(/^direction\s+(TD|TB|BT|LR|RL)$/i);
+      if (directionMatch) { direction = directionMatch[1].toUpperCase(); continue; }
+      let match = line.match(/^state\s+"([^"]+)"\s+as\s+([A-Za-z_][\w-]*)$/i);
+      if (match) { remember(match[2], match[1]); continue; }
+      match = line.match(/^state\s+([A-Za-z_][\w-]*)\s*:\s*(.+)$/i);
+      if (match) { remember(match[1], match[2]); continue; }
+      match = line.match(/^state\s+([A-Za-z_][\w-]*)$/i);
+      if (match) { remember(match[1]); continue; }
+      match = line.match(/^(\[\*\]|[A-Za-z_][\w-]*)\s*-->\s*(\[\*\]|[A-Za-z_][\w-]*)(?:\s*:\s*(.+))?$/);
+      if (match) {
+        const left = endpoint(match[1], match[1] === '[*]' ? 'start' : 'state');
+        const right = endpoint(match[2], match[2] === '[*]' ? 'end' : 'state');
+        edges.push({ from: left.id, to: right.id, label: boundedLabel(match[3] || '') });
+        if (edges.length > MAX_MERMAID_EDGES) throw new Error(`状态转换不能超过 ${MAX_MERMAID_EDGES} 条。`);
+        continue;
+      }
+      if (/[{}]/.test(line)) throw new Error('当前状态图导入暂不支持复合状态。');
+      throw new Error(`无法识别状态图语法：${line.slice(0, 100)}`);
+    }
+    if (!nodes.size) throw new Error('状态图没有状态。');
+    return { type: 'state', direction, nodes: [...nodes.values()], edges };
+  }
+
+  function parseClassDiagram(source) {
+    const lines = sourceLines(source);
+    if (!/^classDiagram$/i.test(lines.shift() || '')) throw new Error('类图必须以 classDiagram 开头。');
+    const classes = new Map();
+    const edges = [];
+    let current = null;
+    const remember = (id, label = '') => {
+      if (!/^[A-Za-z_][\w-]*$/.test(id)) throw new Error(`类标识无效：${id}`);
+      if (!classes.has(id)) classes.set(id, { id, label: boundedLabel(label || id, id), members: [], shape: 'rect' });
+      else if (label) classes.get(id).label = boundedLabel(label, id);
+      if (classes.size > 24) throw new Error('类图最多支持 24 个类。');
+      return classes.get(id);
+    };
+    for (let line of lines) {
+      line = line.replace(/%%.*$/, '').trim();
+      if (!line) continue;
+      if (current) {
+        if (line === '}') { current = null; continue; }
+        if (line.length > MAX_LABEL_LENGTH) throw new Error('类成员文本过长。');
+        if (current.members.length >= 12) throw new Error(`类 ${current.id} 的成员不能超过 12 项。`);
+        current.members.push(cleanLabel(line));
+        continue;
+      }
+      let match = line.match(/^class\s+([A-Za-z_][\w-]*)(?:\s*\[\s*"([^"]+)"\s*\])?\s*\{$/i);
+      if (match) { current = remember(match[1], match[2] || match[1]); continue; }
+      match = line.match(/^class\s+([A-Za-z_][\w-]*)(?:\s*\[\s*"([^"]+)"\s*\])?$/i);
+      if (match) { remember(match[1], match[2] || match[1]); continue; }
+      match = line.match(/^([A-Za-z_][\w-]*)\s*(<\|--|--\|>|\*--|--\*|o--|--o|\.\.>|<\.\.|-->|<--|--|\.\.)\s*([A-Za-z_][\w-]*)(?:\s*:\s*(.+))?$/);
+      if (match) {
+        remember(match[1]); remember(match[3]);
+        const relation = match[4] ? `${match[2]} ${boundedLabel(match[4])}` : match[2];
+        edges.push({ from: match[1], to: match[3], label: relation });
+        if (edges.length > MAX_MERMAID_EDGES) throw new Error(`类关系不能超过 ${MAX_MERMAID_EDGES} 条。`);
+        continue;
+      }
+      if (/^(?:direction|namespace|note)\b/i.test(line)) throw new Error('当前类图导入暂不支持 namespace/note 等高级语法。');
+      throw new Error(`无法识别类图语法：${line.slice(0, 100)}`);
+    }
+    if (current) throw new Error(`类 ${current.id} 缺少结束花括号。`);
+    const nodes = [...classes.values()].map(item => ({
+      id: item.id,
+      text: [item.label, ...item.members].join('\n'),
+      shape: 'rect'
+    }));
+    if (!nodes.length) throw new Error('类图没有类。');
+    return { type: 'class', direction: 'LR', nodes, edges };
+  }
+
+  function parseDurationDays(value) {
+    const match = String(value || '').trim().match(/^(\d+(?:\.\d+)?)(d|w|h)$/i);
+    if (!match) return null;
+    const amount = Number(match[1]);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    const unit = match[2].toLowerCase();
+    return unit === 'w' ? amount * 7 : unit === 'h' ? amount / 24 : amount;
+  }
+
+  function parseGanttDiagram(source) {
+    const lines = sourceLines(source);
+    if (!/^gantt$/i.test(lines.shift() || '')) throw new Error('甘特图必须以 gantt 开头。');
+    const tasks = [];
+    let section = '任务';
+    let title = '';
+    let dateFormat = 'YYYY-MM-DD';
+    for (let line of lines) {
+      line = line.replace(/%%.*$/, '').trim();
+      if (!line) continue;
+      let match = line.match(/^title\s+(.+)$/i);
+      if (match) { title = boundedLabel(match[1]); continue; }
+      match = line.match(/^dateFormat\s+(.+)$/i);
+      if (match) {
+        dateFormat = match[1].trim();
+        if (dateFormat !== 'YYYY-MM-DD') throw new Error('甘特图当前只支持 dateFormat YYYY-MM-DD。');
+        continue;
+      }
+      if (/^(?:axisFormat|tickInterval|weekday|excludes|todayMarker)\b/i.test(line)) continue;
+      match = line.match(/^section\s+(.+)$/i);
+      if (match) { section = boundedLabel(match[1]); continue; }
+      const colon = line.indexOf(':');
+      if (colon <= 0) throw new Error(`无法识别甘特图任务：${line.slice(0, 100)}`);
+      const label = boundedLabel(line.slice(0, colon));
+      const rawParts = line.slice(colon + 1).split(',').map(part => part.trim()).filter(Boolean);
+      const flags = [];
+      while (rawParts.length && /^(?:done|active|crit|milestone)$/i.test(rawParts[0])) flags.push(rawParts.shift().toLowerCase());
+      let id = '';
+      if (rawParts[0] && /^[A-Za-z_][\w-]*$/.test(rawParts[0]) && !/^after\s+/i.test(rawParts[0])) id = rawParts.shift();
+      if (!id) id = `task_${tasks.length + 1}`;
+      const startRaw = rawParts.shift() || '';
+      const durationRaw = rawParts.shift() || '';
+      if (!startRaw || !durationRaw) throw new Error(`甘特图任务“${label}”需要开始时间和持续时间。`);
+      const afterMatch = startRaw.match(/^after\s+([A-Za-z_][\w-]*)$/i);
+      if (!afterMatch && !/^\d{4}-\d{2}-\d{2}$/.test(startRaw)) throw new Error(`甘特图任务“${label}”的开始时间必须是 YYYY-MM-DD 或 after 任务ID。`);
+      let durationDays = parseDurationDays(durationRaw);
+      if (flags.includes('milestone')) durationDays = Math.min(durationDays || 1, 0.25);
+      if (!durationDays) throw new Error(`甘特图任务“${label}”的持续时间应类似 3d、1w 或 12h。`);
+      tasks.push({ id, label, section, startRaw, after: afterMatch?.[1] || '', durationRaw, durationDays, flags });
+      if (tasks.length > 40) throw new Error('甘特图任务不能超过 40 个。');
+    }
+    if (!tasks.length) throw new Error('甘特图没有任务。');
+    const ids = new Set(tasks.map(task => task.id));
+    if (ids.size !== tasks.length) throw new Error('甘特图任务 ID 不能重复。');
+    for (const task of tasks) if (task.after && !ids.has(task.after)) throw new Error(`甘特图依赖任务不存在：${task.after}`);
+    const nodes = tasks.map(task => ({ id: task.id, text: task.label, shape: 'rect' }));
+    const edges = tasks.filter(task => task.after).map(task => ({ from: task.after, to: task.id, label: '' }));
+    return { type: 'gantt', direction: 'LR', title, dateFormat, tasks, nodes, edges };
+  }
+
+  function parseMermaidDiagram(source) {
+    const type = mermaidHeaderType(source);
+    if (type === 'flowchart') return parseFlowchart(source);
+    if (type === 'sequence') return parseSequenceDiagram(source);
+    if (type === 'state') return parseStateDiagram(source);
+    if (type === 'gantt') return parseGanttDiagram(source);
+    if (type === 'class') return parseClassDiagram(source);
+    throw new Error('仅支持 Flowchart、Sequence、State、Gantt 和 Class Diagram。');
+  }
+
+  // Backward-compatible alias used by older callers.
+  function parseSubset(source) {
+    const parsed = parseMermaidDiagram(source);
+    if (parsed.type !== 'flowchart') throw new Error('该接口仅用于 Flowchart。');
+    return parsed;
   }
 
   function validateMermaid(value) {
     const raw = String(value ?? '');
-    if (raw.length > MAX_REPLY_LENGTH) return { ok: false, source: '', error: 'GPT 返回内容过大。' };
+    if (raw.length > MAX_REPLY_LENGTH) return { ok: false, source: '', error: 'AI 返回内容过大。' };
     let source;
     try {
       source = normalizeMermaidResponse(raw);
-      if (source.length > MAX_REPLY_LENGTH) throw new Error('GPT 返回内容过大。');
-      const parsed = parseSubset(source);
-      return { ok: true, source, parsed, stats: { nodes: parsed.nodes.length, edges: parsed.edges.length } };
+      if (source.length > MAX_REPLY_LENGTH) throw new Error('AI 返回内容过大。');
+      const parsed = parseMermaidDiagram(source);
+      return {
+        ok: true,
+        source,
+        type: parsed.type,
+        parsed,
+        stats: { nodes: Number(parsed.nodes?.length || 0), edges: Number(parsed.edges?.length || 0) }
+      };
     } catch (error) {
       return { ok: false, source: source || '', error: String(error?.message || 'Mermaid 格式无效。') };
     }
   }
 
-  function buildGPTPrompt(userPrompt, taskId = '') {
+  function buildMermaidPrompt(userPrompt, taskId = '', diagramType = 'flowchart') {
     const request = limitText(userPrompt, MAX_PROMPT_LENGTH).trim();
-    return [
-      '你是 Quickdraw 的 Mermaid 脑图生成器。',
-      '请严格只输出一份可解析的 Mermaid flowchart 源码，不要输出解释、标题或代码块外文字。',
-      '只允许 flowchart TD、TB、BT、LR 或 RL；每行只能有一个节点定义或一条单独的 --> 连线。',
-      '节点只使用 A[文本]、A(文本)、A((文本))、A{文本}、A([文本])；边标签使用 -->|标签|，禁止链式边。',
-      '禁止 subgraph、style、classDef、class、linkStyle、click、sequenceDiagram、mindmap 及其他语法。',
-      '最多 60 个节点、90 行；标签不要换行，不要包含括号、方括号、花括号、分号、竖线或 HTML。节点标识使用英文字母和数字。',
-      taskId ? `任务编号：${taskId}。不要在回答中复述编号。` : '',
-      `用户需求：${request}`
-    ].join('\n');
+    const type = normalizeDiagramType(diagramType);
+    const common = [
+      '你是 Quickdraw 的 Mermaid 图表生成器。',
+      '只输出一个 ```mermaid 代码块，代码块外不要有解释、标题、提示或任何其他文字。',
+      '所有标识符使用英文字母、数字或下划线；可见标签可以使用中文。',
+      '不要使用 style、classDef、click、HTML 或实验性扩展语法。',
+      taskId ? `任务编号：${taskId}。不要在输出内容中复述编号。` : ''
+    ];
+    const rules = {
+      flowchart: [
+        '生成 Flowchart 流程图。第一行必须是 flowchart TD、TB、BT、LR 或 RL。',
+        '每行只能有一个节点定义或一条单独的 --> 连线，禁止链式连线。',
+        '节点只使用 A[文本]、A(文本)、A((文本))、A{文本}、A([文本])；边标签使用 -->|标签|。',
+        '禁止 subgraph。最多 60 个节点、90 行。'
+      ],
+      sequence: [
+        '生成 Sequence Diagram 时序图。第一行必须是 sequenceDiagram。',
+        '只使用 participant/actor 声明，以及 A->>B: 消息 或 A-->>B: 返回消息。',
+        '不要使用 loop、alt、opt、par、note、activate、deactivate。最多 8 个参与者、24 条消息。'
+      ],
+      state: [
+        '生成 State Diagram 状态图。第一行必须是 stateDiagram-v2。',
+        '只使用 state "显示名称" as StateId、StateA --> StateB: 条件，以及 [*] --> StateId / StateId --> [*]。',
+        '不要使用复合状态、并行状态或花括号状态块。'
+      ],
+      gantt: [
+        '生成 Gantt 甘特图。第一行必须是 gantt，第二行使用 dateFormat YYYY-MM-DD。',
+        '可以使用 title 和 section。任务只使用：任务名 :taskId, YYYY-MM-DD, 3d，或 任务名 :taskId, after otherId, 3d。',
+        '持续时间只使用 d、w 或 h。不要使用 excludes、todayMarker 或复杂日期表达式。最多 40 个任务。'
+      ],
+      class: [
+        '生成 Class Diagram 类图。第一行必须是 classDiagram。',
+        '类只使用 class ClassName { ... }；关系只使用 -->、--、<|--、*--、o--、..>，可在末尾用 : 关系名。',
+        '不要使用 namespace、note、泛型尖括号或关系多重性。最多 24 个类，每个类最多 12 个成员。'
+      ]
+    }[type];
+    return [...common, ...rules, `用户需求：${request}`].filter(Boolean).join('\n');
+  }
+
+  function buildGPTPrompt(userPrompt, taskId = '', diagramType = 'flowchart') {
+    return buildMermaidPrompt(userPrompt, taskId, diagramType);
   }
 
   function buildGPTImagePrompt(userPrompt, taskId = '') {
     return limitText(userPrompt, MAX_PROMPT_LENGTH).trim();
   }
 
-  function buildDoubaoPrompt(userPrompt, taskId = '') {
-    const request = limitText(userPrompt, MAX_PROMPT_LENGTH).trim();
-    return [
-      '你是 Quickdraw 的流程图生成助手。',
-      '请严格只输出一份可解析的 Mermaid flowchart 源码，不要输出解释、标题或代码块外文字。',
-      '只允许 flowchart TD、TB、BT、LR 或 RL；每行只能有一个节点定义或一条单独的 --> 连线。',
-      '节点只使用 A[文本]、A(文本)、A((文本))、A{文本}、A([文本])；边标签使用 -->|标签|，禁止链式边。',
-      '禁止 subgraph、style、classDef、class、linkStyle、click、sequenceDiagram、mindmap 及其他语法。',
-      taskId ? `任务编号：${taskId}。不要在回答中复述编号。` : '',
-      `用户需求：${request}`
-    ].join('\n');
+  function buildDoubaoPrompt(userPrompt, taskId = '', diagramType = 'flowchart') {
+    return buildMermaidPrompt(userPrompt, taskId, diagramType);
   }
 
   function buildDoubaoImagePrompt(userPrompt, taskId = '') {
@@ -245,6 +535,12 @@
   }
 
   function buildGrokImagePrompt(userPrompt, taskId = '') {
+    return limitText(userPrompt, MAX_PROMPT_LENGTH).trim();
+  }
+
+  function buildDolaImagePrompt(userPrompt, taskId = '') {
+    // Same contract as the other image providers: send exactly the user text;
+    // the content script matches the sent bubble via its pre-send baseline.
     return limitText(userPrompt, MAX_PROMPT_LENGTH).trim();
   }
 
@@ -267,6 +563,7 @@
     const p = provider(input.provider || 'gpt');
     const prompt = limitText(input.prompt, MAX_PROMPT_LENGTH).trim();
     const kind = input.kind === 'image-edit' ? 'image-edit' : 'mindmap';
+    const diagramType = kind === 'mindmap' ? normalizeDiagramType(input.diagramType) : '';
     if (!p || !p.enabled || !p.capabilities[kind === 'image-edit' ? 'image' : 'mermaid']) throw new Error(kind === 'image-edit' ? '当前 AI平台未接入图片编辑。' : '当前 AI平台未接入脑图。');
     if (kind !== 'image-edit' && !prompt) throw new Error('请输入 AI 脑图需求。');
     if (!input.boardId || !input.sourceInstanceId) throw new Error('缺少画板任务归属信息。');
@@ -284,6 +581,7 @@
       tabId: Number.isInteger(input.tabId) ? input.tabId : null,
       sourceRevision: Number(input.sourceRevision) || 0,
       prompt,
+      diagramType,
       inputAssetId: kind === 'image-edit' ? String(inputAssets[0]?.assetId || '') : '',
       inputAssetIds: kind === 'image-edit' ? inputAssets.map(item => item.assetId) : [],
       inputAssets: kind === 'image-edit' ? inputAssets : [],
@@ -366,10 +664,14 @@
     DOUBAO_IMAGE_ORIGINS,
     GROK_ORIGINS,
     GROK_AUTH_ORIGINS,
+    DOLA_ORIGINS,
+    DOLA_IMAGE_ORIGINS,
     PROVIDERS,
+    DIAGRAM_TYPES,
     ACTIVE_STATUSES,
     FINAL_STATUSES,
     provider,
+    normalizeDiagramType,
     isAllowedGPTUrl,
     isAllowedGPTAuthUrl,
     createTask,
@@ -379,8 +681,10 @@
     buildDoubaoPrompt,
     buildDoubaoImagePrompt,
     buildGrokImagePrompt,
+    buildDolaImagePrompt,
     validateMermaid,
     normalizeMermaidResponse,
+    parseMermaidDiagram,
     parseSubset,
     eventKey,
     isActiveTask,

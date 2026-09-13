@@ -21,6 +21,20 @@
   const textOf = element => String(element?.innerText ?? element?.textContent ?? '').replace(/\u200b/g, '').trim();
 
   function extractAssistantText(element) {
+    // Prefer the literal contents of a Mermaid code block. ChatGPT's rendered
+    // reply DOM can flatten surrounding paragraphs, while <pre><code> keeps
+    // the exact line breaks Mermaid needs for parsing.
+    const codeBlocks = [...(element?.querySelectorAll?.('pre code, pre') || [])];
+    const seenBlocks = new Set();
+    for (const block of codeBlocks) {
+      const target = block.matches?.('code') ? block : (block.querySelector?.('code') || block);
+      if (!target || seenBlocks.has(target)) continue;
+      seenBlocks.add(target);
+      const value = String(target.textContent || '').replace(/\u200b/g, '').trim();
+      if (/^(?:flowchart|graph)\s+(?:TD|TB|BT|LR|RL)\b|^sequenceDiagram\b|^stateDiagram(?:-v2)?\b|^gantt\b|^classDiagram\b/i.test(value)) {
+        return `\x60\x60\x60mermaid\n${value}\n\x60\x60\x60`;
+      }
+    }
     const copy = element.cloneNode?.(true);
     if (!copy) return '';
     for (const selector of ['button', 'svg', 'nav', 'details', '[aria-hidden="true"]', '[aria-label*="copy" i]', '[aria-label*="复制"]', '[data-testid*="copy" i]', '[data-testid*="thinking" i]', '[data-testid*="reason" i]', '[class*="thinking" i]', '[class*="reasoning" i]']) {
@@ -207,7 +221,10 @@
 
   async function fetchCandidateBlob(candidate) {
     const url = String(candidate?.imageUrl || '');
-    if (!url || /^https?:/i.test(url) || /^blob:|^data:/i.test(url)) {
+    // Only synthetic blob:/data: URLs are readable from the content script.
+    // http(s) result images are cross-origin here and are fetched by the
+    // background worker with the granted host permission (materializeImage).
+    if (/^blob:/i.test(url) || /^data:/i.test(url)) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15_000);
       try {
@@ -642,6 +659,7 @@
     record.requestFingerprint = confirmedMessage?.fingerprint || '';
     record.stage = 'generating';
     emit(taskId, 'send-confirmed', { baselineHashes, requestFingerprint: record.requestFingerprint });
+    if (mode !== 'image-edit') { dispose(taskId); return; }
     watchReply(record);
   }
 
@@ -661,6 +679,7 @@
     record.requestFingerprint = found.fingerprint;
     emitPhase(record.taskId, 'sending', { progress: 1 });
     emit(record.taskId, 'send-confirmed', { baselineHashes: record.baselineHashes || [], requestFingerprint: record.requestFingerprint });
+    if (record.mode !== 'image-edit') { dispose(record.taskId); return; }
     watchReply(record);
   }
 

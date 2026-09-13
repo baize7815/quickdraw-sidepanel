@@ -6,7 +6,12 @@
   const CAPTCHA_WASM_URL = 'vendor/koukoutu-recaptcha.wasm';
   const MAX_MOUSE_EVENTS = 96;
 
-  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const sleep = (ms, signal) => new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
+    const abort = () => { clearTimeout(timer); reject(signal.reason); };
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, ms);
+    signal?.addEventListener('abort', abort, { once: true });
+  });
 
   class KoukoutuError extends Error {
     constructor(message, code = 'koukoutu-error', detail = null) {
@@ -18,6 +23,26 @@
   }
 
   class QuickdrawKoukoutuClient {
+    async ensureSiteVisit(signal) {
+      if (!globalThis.chrome?.tabs?.create || !chrome.storage?.local) return;
+      const key = 'quickdraw_koukoutu_site_visited_v1';
+      const saved = await chrome.storage.local.get(key);
+      signal?.throwIfAborted();
+      if (saved[key] === true) return;
+      const tab = await chrome.tabs.create({ url: BASE_URL, active: true });
+      const deadline = Date.now() + 30_000;
+      while (Date.now() < deadline) {
+        await sleep(300, signal);
+        const current = await chrome.tabs.get(tab.id);
+        if (current.status === 'complete' && /^https:\/\/(?:www\.)?koukoutu\.com(?:\/|$)/i.test(current.url || '')) {
+          // This records a completed visit, not an anonymous identity or login.
+          await chrome.storage.local.set({ [key]: true });
+          return;
+        }
+      }
+      throw new KoukoutuError('抠图网站首次初始化尚未完成，请在已打开的页面完成加载后重试。', 'site-init-timeout');
+    }
+
     constructor() {
       this.mouseEvents = [];
       this.wasmBytes = null;
@@ -40,11 +65,13 @@
       }
     }
 
-    async postForm(path, fields) {
+    async postForm(path, fields, signal) {
+      signal?.throwIfAborted();
       const form = new FormData();
       for (const [key, value] of Object.entries(fields)) form.append(key, String(value ?? ''));
       const response = await fetch(`${BASE_URL}${path}`, {
         method: 'POST',
+        signal,
         body: form,
         credentials: 'omit',
         headers: { accept: 'application/json, text/plain, */*' }
@@ -76,7 +103,7 @@
       return value.startsWith('//') ? `https:${value}` : value;
     }
 
-    async requestUploadSignature(blob) {
+    async requestUploadSignature(blob, signal) {
       const data = await this.postForm('/api/oss/signature', {
         action: 'ucoss',
         type: TOOL_TYPE,
@@ -84,7 +111,7 @@
         reqType: 'PUT',
         userid: 'PUT',
         fileExt: this.extensionForBlob(blob)
-      });
+      }, signal);
       const message = data?.message;
       if (!data?.success || data?.action !== 'ucoss' || message?.code !== 200 || !message.host || !message.key || !message.token) {
         throw new KoukoutuError(this.messageFrom(data, '无法获取匿名上传凭证。'), 'signature-error', data);
@@ -92,10 +119,11 @@
       return message;
     }
 
-    async uploadImage(blob, signature) {
+    async uploadImage(blob, signature, signal) {
       const imageUrl = `${this.normalizeRemoteUrl(signature.host)}${signature.key}`;
       const response = await fetch(imageUrl, {
         method: 'PUT',
+        signal,
         body: blob,
         credentials: 'omit',
         headers: {
@@ -140,17 +168,18 @@
       return [...generated, ...clickEvents];
     }
 
-    async loadWasmBytes() {
+    async loadWasmBytes(signal) {
       if (!this.wasmBytes) {
-        const response = await fetch(chrome.runtime.getURL(CAPTCHA_WASM_URL));
+        const response = await fetch(chrome.runtime.getURL(CAPTCHA_WASM_URL), { signal });
         if (!response.ok) throw new KoukoutuError('验证码组件加载失败。', 'captcha-wasm-missing');
         this.wasmBytes = await response.arrayBuffer();
       }
       return this.wasmBytes;
     }
 
-    async createCaptchaCode() {
-      const bytes = await this.loadWasmBytes();
+    async createCaptchaCode(signal) {
+      const bytes = await this.loadWasmBytes(signal);
+      signal?.throwIfAborted();
       let instance;
       const imports = {
         wasi_snapshot_preview1: {
@@ -209,7 +238,7 @@
       }
     }
 
-    async createTask(imageUrl, width, height) {
+    async createTask(imageUrl, width, height, signal) {
       const data = await this.postForm('/api/segment', {
         image: imageUrl,
         type: TOOL_TYPE,
@@ -217,24 +246,27 @@
         height,
         action: 'zero',
         token: '',
-        captchacode: await this.createCaptchaCode(),
+        captchacode: await this.createCaptchaCode(signal),
         filename: '',
         model: '3',
         edge_enhancement: '0',
         aiShadow: '0',
         modelname: ''
-      });
+      }, signal);
       if (!data?.success || !data?.message?.taskId) {
+        if (/captchacode|匿名验证/i.test(JSON.stringify(data))) {
+          await globalThis.chrome?.storage?.local?.remove('quickdraw_koukoutu_site_visited_v1');
+        }
         throw new KoukoutuError(this.messageFrom(data, '抠图任务创建失败。'), 'segment-error', data);
       }
       return String(data.message.taskId);
     }
 
-    async waitForResult(taskId, onProgress) {
+    async waitForResult(taskId, onProgress, signal) {
       const deadline = Date.now() + 90_000;
       while (Date.now() < deadline) {
-        await sleep(1000);
-        const data = await this.postForm('/api/query', { type: TOOL_TYPE, taskId, token: '' });
+        await sleep(1000, signal);
+        const data = await this.postForm('/api/query', { type: TOOL_TYPE, taskId, token: '' }, signal);
         const message = data?.message;
         onProgress?.({
           state: 'processing',
@@ -249,8 +281,8 @@
       throw new KoukoutuError('抠图等待超时，请稍后重试。', 'timeout');
     }
 
-    async downloadResult(resultUrl) {
-      const response = await fetch(this.normalizeRemoteUrl(resultUrl), { credentials: 'omit' });
+    async downloadResult(resultUrl, signal) {
+      const response = await fetch(this.normalizeRemoteUrl(resultUrl), { credentials: 'omit', signal });
       if (!response.ok) throw new KoukoutuError(`抠图结果下载失败（HTTP ${response.status}）。`, 'download-error');
       const blob = await response.blob();
       if (blob.type.startsWith('image/')) return blob;
@@ -281,22 +313,28 @@
       return fallback;
     }
 
-    async removeBackground(blob, dimensions, onProgress) {
+    async removeBackground(blob, dimensions, onProgress, signal) {
+      signal?.throwIfAborted();
       if (!(blob instanceof Blob) || !blob.type.startsWith('image/')) {
         throw new KoukoutuError('请选择有效图片。', 'invalid-image');
       }
       if (Math.min(dimensions?.width || 0, dimensions?.height || 0) < 24) {
         throw new KoukoutuError('图片尺寸太小，宽和高都需要至少 24 像素。', 'image-too-small');
       }
+      await this.ensureSiteVisit(signal);
+      signal?.throwIfAborted();
       onProgress?.({ state: 'signature' });
-      const signature = await this.requestUploadSignature(blob);
+      const signature = await this.requestUploadSignature(blob, signal);
+      signal?.throwIfAborted();
       onProgress?.({ state: 'uploading' });
-      const imageUrl = await this.uploadImage(blob, signature);
+      const imageUrl = await this.uploadImage(blob, signature, signal);
+      signal?.throwIfAborted();
       onProgress?.({ state: 'creating' });
-      const taskId = await this.createTask(imageUrl, dimensions.width, dimensions.height);
-      const resultUrl = await this.waitForResult(taskId, onProgress);
+      const taskId = await this.createTask(imageUrl, dimensions.width, dimensions.height, signal);
+      const resultUrl = await this.waitForResult(taskId, onProgress, signal);
+      signal?.throwIfAborted();
       onProgress?.({ state: 'downloading', progress: 100 });
-      return this.downloadResult(resultUrl);
+      return this.downloadResult(resultUrl, signal);
     }
   }
 

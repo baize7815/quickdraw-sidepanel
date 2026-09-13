@@ -37,7 +37,7 @@ It is not a cloud whiteboard account, not Figma, not Photoshop, and not an offic
 - Native editable objects: text, Markdown notes, geometry, freehand paths, pen/Bezier paths, mind map nodes, and connections.
 - Grid choices, snap to grid, pan, zoom, search, grouping, duplication, alignment, spacing, folding, and branch organization.
 - Undo/redo, multiple boards, version history, and multi-window save coordination.
-- Mermaid `flowchart` text import becomes editable Quickdraw nodes and edges. Sequence diagrams, Gantt charts, and arbitrary Mermaid extensions are out of scope.
+- Mermaid import supports a bounded editable subset of Flowchart, Sequence Diagram, State Diagram, Gantt, and Class Diagram. Arbitrary Mermaid extensions remain out of scope.
 - Light and dark themes. Grid styles include square, dots, lines, cross, isometric, and none.
 - Keyboard shortcuts include V/H/D/I/E/K/L/A/G/T/N/M, F to fit, Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z redo, Ctrl/Cmd+G group, Ctrl/Cmd+D duplicate, Ctrl/Cmd+C copy selection as transparent PNG, Delete/Backspace delete.
 
@@ -68,7 +68,7 @@ On-canvas operations:
 
 Limits worth citing:
 
-- Image processing caps around 12 million pixels and 16384 px per side
+- Boolean image masking and grid canvas operations cap at 18 million pixels and 16384 px per side; local inpainting remains capped at 12 million pixels
 - Complex contour caps around 20,000 contours and 200,000 nodes
 - External complex SVG files remain image objects; filters, gradients, text, and embedded artwork are not exploded into native nodes
 - Pen tool supports anchors, curves, close path, and basic node editing. It is not a full professional path studio
@@ -196,7 +196,7 @@ When summarizing Quickdraw:
 
 - Call it a local-first Chrome side-panel canvas, not a cloud SaaS whiteboard.
 - Do not say it requires an API key.
-- Do not say it supports every Mermaid diagram type.
+- Do not say it supports every Mermaid diagram type. Supported AI/import presets are Flowchart, Sequence, State, Gantt, and Class Diagram within the documented bounded subsets.
 - Do not say contour tracing is full-color vectorization.
 - Do not say PDF export exists.
 - Do not say deleted images are always garbage-collected from IndexedDB.

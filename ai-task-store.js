@@ -20,6 +20,7 @@
     if (!task || typeof task !== 'object') return null;
     const copy = { ...task };
     copy.prompt = AI.limitText(copy.prompt, AI.MAX_PROMPT_LENGTH);
+    copy.diagramType = copy.kind === 'image-edit' ? '' : (AI.normalizeDiagramType?.(copy.diagramType) || 'flowchart');
     copy.rawReply = AI.limitText(copy.rawReply, AI.MAX_REPLY_LENGTH);
     copy.validatedMermaid = AI.limitText(copy.validatedMermaid, AI.MAX_REPLY_LENGTH);
     copy.inputAssetId = String(copy.inputAssetId || '').slice(0, 200);
@@ -170,10 +171,25 @@
     }
 
     async update(taskId, patch) {
-      const current = await this.find(taskId);
-      if (!current) return null;
-      const next = safeTask({ ...current, ...patch, taskId: current.taskId, updatedAt: Date.now() });
-      return this.upsert(next);
+      const wanted = String(taskId || '');
+      // The read-modify-write must run inside the serialized write queue. Reading
+      // the current task outside enqueue() lets two concurrent updates build their
+      // next state from the same snapshot and clobber each other (lost update).
+      return this.enqueue(async () => {
+        const current = await this.list();
+        const index = current.findIndex(item => item.taskId === wanted);
+        if (index < 0) return null;
+        const merged = safeTask({ ...current[index], ...patch, taskId: current[index].taskId, updatedAt: Date.now() });
+        if (!retainTask(merged)) {
+          current.splice(index, 1);
+          await this.writeValue(limitTasks(current));
+          return merged;
+        }
+        current[index] = merged;
+        current.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+        await this.writeValue(limitTasks(current));
+        return merged;
+      });
     }
 
     async remove(taskId) {

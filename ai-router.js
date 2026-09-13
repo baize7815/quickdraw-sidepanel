@@ -26,8 +26,19 @@
       this.providers = { gpt: new globalThis.QuickdrawGPTProvider(this.assetStore) };
       if (globalThis.QuickdrawDoubaoProvider) this.providers.doubao = new globalThis.QuickdrawDoubaoProvider(this.assetStore);
       if (globalThis.QuickdrawGrokProvider) this.providers.grok = new globalThis.QuickdrawGrokProvider(this.assetStore);
+      if (globalThis.QuickdrawDolaProvider) this.providers.dola = new globalThis.QuickdrawDolaProvider(this.assetStore);
       this.operationQueue = Promise.resolve();
       this.restorePassiveTaskIds = new Set();
+      // In-memory setTimeout timers are lost when the MV3 service worker is
+      // suspended. A matching chrome.alarms entry survives suspension and wakes the
+      // worker to re-check the persisted stage deadline. timeoutTask() is
+      // idempotent and re-validates the deadline before failing anything.
+      if (globalThis.chrome?.alarms?.onAlarm) {
+        chrome.alarms.onAlarm.addListener(alarm => {
+          const prefix = 'qd-stage-timeout:';
+          if (alarm?.name?.startsWith?.(prefix)) this.timeoutTask(alarm.name.slice(prefix.length)).catch(() => {});
+        });
+      }
       this.ready = this.restore();
     }
 
@@ -175,13 +186,27 @@
       return updated;
     }
 
+    stageAlarmName(taskId) { return `qd-stage-timeout:${taskId}`; }
+
+    clearStageTimer(taskId) {
+      if (!taskId) return;
+      clearTimeout(this.timers.get(taskId));
+      this.timers.delete(taskId);
+      try { globalThis.chrome?.alarms?.clear(this.stageAlarmName(taskId)); } catch {}
+    }
+
     scheduleTimeout(task) {
-      clearTimeout(this.timers.get(task.taskId));
+      this.clearStageTimer(task.taskId);
       const deadlines = [Number(task.stageDeadlineAt || 0), Number(task.deadlineAt || 0)].filter(value => value > 0);
       if (!deadlines.length) return;
-      const delay = Math.max(250, Math.min(...deadlines) - Date.now());
+      const deadlineAt = Math.min(...deadlines);
+      const delay = Math.max(250, deadlineAt - Date.now());
       const timer = setTimeout(() => this.timeoutTask(task.taskId).catch(() => {}), delay);
       this.timers.set(task.taskId, timer);
+      // Persistent fallback that survives service-worker suspension. It may fire
+      // later than an in-memory timer (alarms have a minimum period when packed);
+      // timeoutTask re-reads the persisted deadline, so a late wake is harmless.
+      try { globalThis.chrome?.alarms?.create(this.stageAlarmName(task.taskId), { when: deadlineAt }); } catch {}
     }
 
     async stopListener(task) { await this.providers[task.provider]?.stop(task); }
@@ -219,10 +244,11 @@
 
     async timeoutTask(taskId) {
       return this.serialize(async () => {
+      await this.ready;
       const task = await this.store.find(taskId);
-      if (!AI.isActiveTask(task)) return;
+      if (!AI.isActiveTask(task)) { this.clearStageTimer(taskId); return; }
       const deadlines = [Number(task.stageDeadlineAt || 0), Number(task.deadlineAt || 0)].filter(value => value > 0);
-      if (!deadlines.length) { clearTimeout(this.timers.get(task.taskId)); this.timers.delete(task.taskId); return; }
+      if (!deadlines.length) { this.clearStageTimer(task.taskId); return; }
       if (deadlines.length && Math.min(...deadlines) > Date.now()) { this.scheduleTimeout(task); return; }
       const error = task.stage === 'uploading' ? '图片上传长时间没有可验证进展，任务已停止，未自动重发。' : `${this.providers[task.provider]?.getLabel?.() || 'AI'} ${task.stage || '处理'}阶段超时，未自动重发。`;
       await this.finishActive(task, 'needs-attention', error);
@@ -230,8 +256,7 @@
     }
 
     release(task) {
-      clearTimeout(this.timers.get(task.taskId));
-      this.timers.delete(task.taskId);
+      this.clearStageTimer(task.taskId);
       if (this.activeByProvider.get(task.provider) === task.taskId) this.activeByProvider.delete(task.provider);
     }
 
@@ -634,6 +659,24 @@
         if (!['connecting', 'sending', 'waiting'].includes(task.status) || !message.requestFingerprint) return { ok: false, error: '拒绝无效发送确认。' };
         const requestFingerprint = String(message.requestFingerprint || '').slice(0, 80);
         const requestMessageId = String(message.requestMessageId || '').slice(0, 240);
+        if (task.kind !== 'image-edit') {
+          // Mermaid/脑图模式只负责把受预设约束的需求可靠发送到 AI 页面。
+          // 一旦页面确认用户消息已经出现，就停止监听页面回复并结束任务；
+          // 不清理/关闭标签页，让用户继续在原会话中查看和使用生成结果。
+          await this.stopListener(task);
+          const sent = await this.update(task, {
+            status: 'sent',
+            baselineHashes: Array.isArray(message.baselineHashes) ? message.baselineHashes.slice(0, 80) : [],
+            requestFingerprint,
+            requestMessageId,
+            error: '',
+            deadlineAt: null,
+            stageDeadlineAt: 0,
+            seenEventKeys: nextSeen
+          });
+          this.release(sent);
+          return { ok: true, task: sent };
+        }
         if (task.status === 'waiting' && task.requestFingerprint === requestFingerprint) {
           if (requestMessageId && requestMessageId !== task.requestMessageId) await this.update(task, { requestMessageId, seenEventKeys: nextSeen });
           return { ok: true, duplicate: true };
@@ -651,6 +694,9 @@
           return { ok: false, error: failed.error };
         }
         const ready = await this.update(returning, { status: 'ready', rawReply, validatedMermaid: checked.source, deadlineAt: null, stageDeadlineAt: 0, error: '', seenEventKeys: nextSeen, stats: checked.stats });
+        // Result captured: detach the page observer/port instead of leaving it
+        // watching the whole document until the tab is eventually closed.
+        await this.stopListener(ready);
         this.release(ready);
         return { ok: true };
       }
@@ -674,6 +720,8 @@
         if (result.pending.length) {
           try {
             const pending = await this.update(returning, this.imageTaskPatch(result.outputs, result.pending, result.errors, returning, nextSeen));
+            // Retry re-fetches from the background (retryImage), so the page observer is no longer needed.
+            await this.stopListener(pending);
             this.release(pending);
             return { ok: true, pendingImagePermission: result.errors.some(error => error?.code === 'image-origin-permission'), task: pending };
           } catch (error) {
@@ -701,6 +749,7 @@
         // persisted. A failed delete is harmless here and can be retried by
         // later storage cleanup without losing the generated result.
         await this.cleanupInput(returning);
+        await this.stopListener(ready);
         this.release(ready);
         return { ok: true, task: ready };
       }
@@ -711,9 +760,9 @@
           this.release(paused);
           return { ok: true, paused: true, task: paused };
         }
-        if (message.code === 'raw-image-unavailable' && task.provider === 'doubao' && task.kind === 'image-edit') {
+        if (message.code === 'raw-image-unavailable' && ['doubao', 'dola'].includes(task.provider) && task.kind === 'image-edit') {
           await this.stopListener(task);
-          const paused = await this.update(task, { status: 'paused', pauseReason: 'raw-image-unavailable', pausedAt: Date.now(), error: AI.limitText(message.error || '豆包原图暂不可读取。', 1_000), deadlineAt: null, stageDeadlineAt: 0, seenEventKeys: nextSeen });
+          const paused = await this.update(task, { status: 'paused', pauseReason: 'raw-image-unavailable', pausedAt: Date.now(), error: AI.limitText(message.error || '无水印原图暂不可读取。', 1_000), deadlineAt: null, stageDeadlineAt: 0, seenEventKeys: nextSeen });
           this.release(paused);
           return { ok: true, paused: true, task: paused };
         }

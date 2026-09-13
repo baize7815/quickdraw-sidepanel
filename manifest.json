@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Quickdraw 侧边栏画板",
-  "version": "3.7.4",
+  "version": "3.8.7",
   "minimum_chrome_version": "116",
-  "description": "本地侧边栏无限画布。支持钢笔矢量路径、透明轮廓转 SVG、旋转与镜像、图片遮罩、宫格切图、比例裁剪、AI 抠图及多格式导出。",
+  "description": "本地侧边栏无限画布。支持可编辑 Mermaid 多图表导入、AI 图表生成、钢笔矢量路径、透明像素裁剪、图片处理及多格式导出。",
   "permissions": [
     "sidePanel",
     "storage",
@@ -13,7 +13,8 @@
     "activeTab",
     "clipboardWrite",
     "scripting",
-    "tabGroups"
+    "tabGroups",
+    "alarms"
   ],
   "optional_host_permissions": [
     "http://*/*",
@@ -28,7 +29,9 @@
     "sandbox": "sandbox allow-scripts; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; object-src 'none'"
   },
   "sandbox": {
-    "pages": ["opencv-sandbox.html"]
+    "pages": [
+      "opencv-sandbox.html"
+    ]
   },
   "background": {
     "service_worker": "background.js"

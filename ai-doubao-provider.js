@@ -17,7 +17,7 @@
     // Input images are sent as extension-owned data URLs. Request output CDN
     // access only when the actual reply URL needs to be fetched.
     getQueryUrls() { return ['https://www.doubao.com/*']; }
-    getTextPrompt(prompt, taskId) { return AI.buildDoubaoPrompt(prompt, taskId); }
+    getTextPrompt(prompt, taskId, diagramType = 'flowchart') { return AI.buildDoubaoPrompt(prompt, taskId, diagramType); }
     getImagePrompt(prompt, taskId) { return AI.buildDoubaoImagePrompt(prompt, taskId); }
     getPermissionOrigins(task = null) {
       return [...(AI.DOUBAO_ORIGINS || ['https://www.doubao.com/*']), ...(task?.kind === 'image-edit' ? (AI.DOUBAO_IMAGE_ORIGINS || []) : [])];
@@ -26,7 +26,8 @@
       const tab = await chrome.tabs.get(tabId);
       if (!this.isAllowedUrl(tab.url || tab.pendingUrl)) return;
       if (Number.isInteger(tab.groupId) && tab.groupId >= 0 && chrome.tabGroups?.update) {
-        await chrome.tabGroups.update(tab.groupId, { collapsed: false });
+        // Group presentation must not prevent activating the task page.
+        try { await chrome.tabGroups.update(tab.groupId, { collapsed: false }); } catch {}
       }
       await chrome.tabs.update(tabId, { active: true });
     }
@@ -199,7 +200,7 @@
       const isStart = command?.action === 'start';
       const requestText = isStart
         ? String(command?.prompt || '')
-        : (task?.kind === 'image-edit' ? this.getImagePrompt(task.prompt, task.taskId) : this.getTextPrompt(task.prompt, task.taskId));
+        : (task?.kind === 'image-edit' ? this.getImagePrompt(task.prompt, task.taskId) : this.getTextPrompt(task.prompt, task.taskId, task.diagramType));
       const enriched = {
         ...command,
         requestText,
@@ -213,7 +214,7 @@
       const tab = await chrome.tabs.get(task.tabId);
       if (!this.isAllowedUrl(tab.url || tab.pendingUrl)) throw new Error(`绑定标签页已离开 ${this.getLabel()}。`);
       await chrome.scripting.executeScript({ target: { tabId: task.tabId }, files: [this.getContentScript()] });
-      const requestText = task?.kind === 'image-edit' ? this.getImagePrompt(task.prompt, task.taskId) : this.getTextPrompt(task.prompt, task.taskId);
+      const requestText = task?.kind === 'image-edit' ? this.getImagePrompt(task.prompt, task.taskId) : this.getTextPrompt(task.prompt, task.taskId, task.diagramType);
       const response = await chrome.tabs.sendMessage(task.tabId, {
         type: this.getCommandType(), taskId: task.taskId, action: 'probe',
         mode: task.kind === 'image-edit' ? 'image-edit' : 'mindmap',

@@ -53,7 +53,9 @@ Quickdraw is not Figma and not Photoshop. It finishes the job of “note it, dra
 
 ## Install
 
-**Latest release: [v3.7.4](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.7.4)** — multi-image import and selected-object PNG / SVG downloads. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.7.4/quickdraw-sidepanel-v3.7.4.zip), extract it, and load the folder containing `manifest.json` using the steps below.
+**Latest release: [v3.8.7](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.8.7)** — editable Mermaid import, AI diagram generation, Dola provider, transparent-pixel crop, and manual update checks. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.8.7/quickdraw-sidepanel-v3.8.7.zip), extract it, and load the folder containing `manifest.json` using the steps below.
+
+Use **Check for updates** in the More menu to check GitHub manually; there are no periodic checks. Updating an unpacked extension requires extracting the new ZIP over the original folder and clicking Reload in the extension manager. Export a project backup first; do not uninstall the extension.
 
 The public install path is unpacked source. Use desktop **Chrome 116 or newer**. Other Chromium browsers need the matching extension APIs; verify them yourself.
 
@@ -101,7 +103,7 @@ flowchart LR
     D --> E
 ```
 
-After it generates, drag nodes, double-click to edit text, change colors, or delete edges. This is the supported basic `flowchart` subset, not every Mermaid diagram type.
+After it generates, drag nodes, double-click to edit text, change colors, or delete edges. Flowchart is the most complete editable subset; the AI/import path also supports bounded Sequence, State, Gantt, and Class Diagram subsets.
 
 The working path is four steps:
 
@@ -134,7 +136,7 @@ The board also supports:
 
 - **Adjustable crop:** click the crop button for free crop; double-click the button to pick `1:1`, `9:16`, `16:9`, `3:4`, `4:3`, or a custom ratio. Drag to draw a crop box, then release to adjust it: drag inside to move it or use any of the eight handles to resize. Double-click inside the box to apply; `Esc` cancels. Fixed ratios, rotation, and flips are preserved; cropping can be undone.
 - **Grid slice:** select one image and use the left toolbar to preview rows, columns, and spacing before confirming. Presets include `1×2`, `2×1`, `2×2`, `2×3`, `3×2`, and `3×3` (columns × rows); custom grids support up to 100 pieces. Spacing uses source-image pixels: `0` is seamless, positive values skip strips between cells, and negative values include overlapping content in adjacent slices. Slices stay within the source image and retain its placement, rotation, and flips. Each piece can be moved or exported; undo restores the source.
-- **Grid collage:** group at least two images with `Ctrl / ⌘ + G`, then select the complete group. The left-toolbar collage action appears only when every group member is an image. Preview the grid and spacing, then generate a new PNG beside the original group. Images follow their canvas order, top to bottom and left to right, and fit fully inside equal-sized cells without stretching. Positive spacing leaves transparent gaps; negative spacing overlaps cells, with later images drawn over earlier ones. The original group stays, and generation can be undone. Use enough cells for all images (up to 100); unused cells remain transparent. Output is limited to 12 million pixels and 16,384 pixels per side.
+- **Grid collage:** group at least two images with `Ctrl / ⌘ + G`, then select the complete group. The left-toolbar collage action appears only when every group member is an image. Preview the grid and spacing, then generate a new PNG beside the original group. Images follow their canvas order, top to bottom and left to right, and fit fully inside equal-sized cells without stretching. Positive spacing leaves transparent gaps; negative spacing overlaps cells, with later images drawn over earlier ones. The original group stays, and generation can be undone. Use enough cells for all images (up to 100); unused cells remain transparent. Output is limited to 18 million pixels and 16,384 pixels per side.
 - **Image mask:** select one image plus one shape/stroke, then intersect, subtract, or split. The result is a transparent PNG.
 - **Local repair:** OpenCV Telea inpainting on a boxed region. The image is not uploaded.
 - **Online background removal:** Koukoutu generates a transparent background, one image at a time for multi-select. This uploads the selected image and submits the service’s interaction checksum.
@@ -151,7 +153,7 @@ AI is optional. The basic board does not depend on it. Current integrations driv
 
 **Image editing:** select objects on the board, open AI image edit, pick a provider, and describe the change — for example, “recolor image 1 using image 2.” At most four input images. A text prompt is optional; results depend on the provider. Successful reads return to the board for further editing or export.
 
-**Mind maps:** open the AI mind-map entry and describe a process or structure. Returned Mermaid is validated first, then converted into editable nodes and edges.
+**AI Mermaid:** open the AI entry, choose a Flowchart, Sequence, State, Gantt, or Class Diagram preset, then describe the diagram. For AI Mermaid, Quickdraw now ends the task as soon as the provider page verifies that the prompt was sent. It no longer reads or auto-imports the reply, and the provider tab stays open.
 
 The first use asks for site access; new result-image hosts may need another grant. Task status covers upload, generation, result reading, or user action needed. The extension does not automatically resend a request it cannot confirm was sent.
 
@@ -245,7 +247,7 @@ Transparent-contour tracing reads alpha, not the artwork inside. A color illustr
 <details>
 <summary><strong>Does it support every Mermaid diagram?</strong></summary>
 
-No. It targets basic `flowchart` nodes and arrow edges. AI import uses a stricter subset. Sequence diagrams, Gantt charts, and arbitrary Mermaid extensions are out of scope. One node or edge per line is the most reliable input.
+No. It supports bounded subsets of Flowchart, Sequence Diagram, State Diagram, Gantt, and Class Diagram. Advanced Mermaid constructs and arbitrary extensions remain out of scope.
 
 </details>
 

@@ -221,18 +221,24 @@
 
     async saveVersion(fileId, document, name, force = false) {
       if (!fileId || !document) return;
-      const versions = await this.listVersions(fileId);
-      const latest = versions[0];
-      const hash = core.hashString(JSON.stringify(document.elements || []));
-      if (latest?.hash === hash) return;
-      const now = Date.now();
-      if (!force && latest && now - latest.createdAt < 60_000) {
-        await this.transaction('versions', 'readwrite', store => store.put({ ...latest, document: core.clone(document), name, hash, createdAt: now }));
-        return;
-      }
-      await this.transaction('versions', 'readwrite', store => store.add({ fileId, document: core.clone(document), name, hash, createdAt: now }));
-      const refreshed = await this.listVersions(fileId);
-      for (const old of refreshed.slice(30)) await this.transaction('versions', 'readwrite', store => store.delete(old.id));
+      // Serialize the check-then-write per board. Without this lock two concurrent
+      // saves (e.g. two side-panel windows) can both miss the 60s merge window and
+      // add duplicate version rows. navigator.locks also works across pages/SW.
+      return this.withLock(`version:${fileId}`, async () => {
+        const versions = await this.listVersions(fileId);
+        const latest = versions[0];
+        const hash = core.hashString(JSON.stringify(document.elements || []));
+        if (latest?.hash === hash) return;
+        const now = Date.now();
+        if (!force && latest && now - latest.createdAt < 60_000) {
+          await this.transaction('versions', 'readwrite', store => store.put({ ...latest, document: core.clone(document), name, hash, createdAt: now }));
+          return;
+        }
+        await this.transaction('versions', 'readwrite', store => store.add({ fileId, document: core.clone(document), name, hash, createdAt: now }));
+        const refreshed = await this.listVersions(fileId);
+        // Keep at most 5 historical snapshots per board.
+        for (const old of refreshed.slice(5)) await this.transaction('versions', 'readwrite', store => store.delete(old.id));
+      });
     }
 
     async listVersions(fileId) {
@@ -250,21 +256,30 @@
     }
 
     async cleanupAssets(referencedIds) {
-      const keep = new Set(referencedIds || []);
+      const keep = new Set([...(referencedIds || [])].map(id => String(id)));
       const db = await this.openDatabase();
       const all = await new Promise((resolve, reject) => {
         const request = db.transaction('assets', 'readonly').objectStore('assets').getAllKeys();
         request.onsuccess = () => resolve(request.result || []);
         request.onerror = () => reject(request.error);
       });
+      // Safety fuse: an empty keep-set almost certainly means reference collection
+      // failed partway; never wipe the whole asset store in that case.
+      if (keep.size === 0 && all.length > 0) {
+        console.warn('Quickdraw asset GC skipped: referenced set is empty while assets exist.');
+        return 0;
+      }
+      let deleted = 0;
       for (const id of all) {
-        if (keep.has(id)) continue;
+        if (keep.has(String(id))) continue;
         this.objectUrlPromises.delete(id);
         const url = this.objectUrls.get(id);
         if (url) URL.revokeObjectURL(url);
         this.objectUrls.delete(id);
         await this.transaction('assets', 'readwrite', store => store.delete(id));
+        deleted += 1;
       }
+      return deleted;
     }
   }
 
