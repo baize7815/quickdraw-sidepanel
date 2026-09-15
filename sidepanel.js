@@ -3205,7 +3205,7 @@
 
     async waitForImages(items=this.elements){await Promise.all(items.filter(e=>e.type==='image').map(e=>new Promise(resolve=>{const img=this.getCachedImage(e);if(img?.complete&&img.naturalWidth)return resolve();const done=()=>resolve();img?.addEventListener('load',done,{once:true});img?.addEventListener('error',done,{once:true});setTimeout(done,2000);})));}
 
-    async createPNGBlob(transparent=false,requested=null,padding=8){
+    async createPNGBlob(transparent=false,requested=null,padding=0){
       const items=this.exportElementsFor(requested);if(!items.length)throw new Error('empty-export');await this.waitForImages(items);this.exporting=true;
       try{const b=this.getElementsBBox(items)||{x:(-this.offsetX)/this.scale,y:(-this.offsetY)/this.scale,w:this.width/this.scale,h:this.height/this.scale},pad=padding,scale=2,width=Math.ceil((b.w+pad*2)*scale),height=Math.ceil((b.h+pad*2)*scale);if(width>32767||height>32767||width*height>120_000_000)throw new Error('canvas-too-large');const c=document.createElement('canvas');c.width=width;c.height=height;const ctx=c.getContext('2d');if(!ctx)throw new Error('canvas-unavailable');if(!transparent){ctx.fillStyle=this.theme==='dark'?'#191713':'#F9FAFB';ctx.fillRect(0,0,c.width,c.height);}ctx.save();ctx.scale(scale,scale);ctx.translate(-b.x+pad,-b.y+pad);for(const edge of items)if(edge.type==='mindedge')this.drawMindEdge(ctx,edge,false);for(const el of items)if(el.type!=='mindedge')this.drawElement(ctx,el);ctx.restore();return await new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error('png-encode-failed')),'image/png'));}finally{this.exporting=false;}
     }
