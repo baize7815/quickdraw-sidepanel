@@ -156,11 +156,9 @@
         </div>
       </div>
       <div class="style-card line-card">
-        <div class="style-row">
-          <button class="style-option size-option" data-size="2" title="细"><span class="size-pip" style="--pip:3px"></span></button>
-          <button class="style-option size-option active" data-size="4" title="中"><span class="size-pip" style="--pip:6px"></span></button>
-          <button class="style-option size-option" data-size="8" title="粗"><span class="size-pip" style="--pip:10px"></span></button>
-          <button class="style-option size-option" data-size="14" title="特粗"><span class="size-pip" style="--pip:14px"></span></button>
+        <div class="style-row size-row">
+          <input id="size-slider" type="range" min="1" max="30" step="1" value="4" title="线条粗细（拖动或输入数字）" aria-label="线条粗细">
+          <input id="size-number" class="size-number" type="number" min="1" max="30" step="1" value="4" title="线条粗细数值" aria-label="线条粗细数值">
         </div>
         <div class="style-row">
           <button class="style-option dash-option active" data-dash="solid" title="实线"><svg viewBox="0 0 24 24"><path d="M4 12h16"/></svg></button>

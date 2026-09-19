@@ -1056,11 +1056,17 @@
 
     centerSelectedBoth(){
       const items=this.getSelectedElements().filter(el=>el.type!=='mindedge');
-      if(items.length<2){this.toast('至少选择两个对象才能水平垂直居中。');return;}
-      const outer=this.getElementsBBox(items),target=this.alignmentAnchors(outer);
-      for(const el of items){
-        const a=this.alignmentAnchors(this.getElementBBox(el));
-        this.moveElement(el,target.center-a.center,target.middle-a.middle);
+      if(items.length<1){this.toast('请先选择要居中的对象。');return;}
+      if(items.length===1){
+        const box=this.getElementBBox(items[0]);if(!box)return;
+        const c=this.screenToWorld(this.width/2,this.height/2),a=this.alignmentAnchors(box);
+        this.moveElement(items[0],c.x-a.center,c.y-a.middle);
+      }else{
+        const outer=this.getElementsBBox(items),target=this.alignmentAnchors(outer);
+        for(const el of items){
+          const a=this.alignmentAnchors(this.getElementBBox(el));
+          this.moveElement(el,target.center-a.center,target.middle-a.middle);
+        }
       }
       this.commit();this.render();
     }
@@ -1185,7 +1191,7 @@
         // keyboard focus. Reclaim its window only during a direct input click.
         this.focusTextInput(event.target.closest('input,textarea,[contenteditable],[role="textbox"]'));
       },true);
-      this.container.addEventListener('pointerdown',e=>this.onPointerDown(e),{passive:false});
+      this.container.addEventListener('pointerdown',e=>{if(e.button===0&&!this.isTextEditingTarget(e.target))this.container.focus({preventScroll:true});this.onPointerDown(e);},{passive:false});
       this.container.addEventListener('pointermove',e=>this.onPointerMove(e),{passive:false});
       window.addEventListener('pointerup',e=>this.onPointerUp(e));
       window.addEventListener('pointercancel',e=>this.onPointerUp(e));
@@ -1273,7 +1279,7 @@
       if(this.currentTool==='select'&&this.isResizing&&this.getSelectedElements().length){this.resizeSelection(this.resizeHandle,this.snapWorldPoint(p),e.shiftKey);this.render();return;}
       if(this.currentTool==='select'&&this.isMarqueeSelecting){this.marqueeRect=this.rectFromPoints(this.marqueeStart,p);this.render();return;}
       if(this.currentTool==='eraser'){this.eraseAt(p);return;}if(!this.currentElement)return;
-      if(this.currentElement.points){const pts=this.currentElement.points,last=pts[pts.length-1];if(!last||Math.hypot(p.x-last.x,p.y-last.y)>1/this.scale){const point={x:p.x,y:p.y};if(this.currentElement.type==='draw')point.pressure=e.pressure||.5;pts.push(point);}}else{const q=this.snapWorldPoint(p);this.currentElement.w=q.x-this.currentElement.x;this.currentElement.h=q.y-this.currentElement.y;}this.render();
+      if(this.currentElement.points){const pts=this.currentElement.points,last=pts[pts.length-1];if(!last||Math.hypot(p.x-last.x,p.y-last.y)>1/this.scale){const point={x:p.x,y:p.y};if(this.currentElement.type==='draw')point.pressure=e.pressure||.5;pts.push(point);}}else{const q=this.snapWorldPoint(p);let w=q.x-this.currentElement.x,h=q.y-this.currentElement.y;if(e.shiftKey){const t=this.currentElement.type;if(t==='line'||t==='arrow'){const len=Math.hypot(w,h);if(len>1e-6){const ang=Math.round(Math.atan2(h,w)/(Math.PI/4))*(Math.PI/4);w=Math.cos(ang)*len;h=Math.sin(ang)*len;}}else{const len=Math.max(Math.abs(w),Math.abs(h));w=(w<0?-1:1)*len;h=(h<0?-1:1)*len;}}this.currentElement.w=w;this.currentElement.h=h;}this.render();
     }
 
     onPointerUp(e) {
@@ -1520,7 +1526,7 @@
     syncSizeLevelUI(forceLevel=null){
       const nodes=this.getSelectedElements().filter(el=>el.type==='mindnode');let level=forceLevel;
       if(level==null)level=nodes.length?this.mindLevelForFontSize(nodes[nodes.length-1].fontSize):this.currentSize;
-      $$('.size-option').forEach(b=>b.classList.toggle('active',Number(b.dataset.size)===Number(level)));
+      const slider=$('#size-slider'),num=$('#size-number');if(slider)slider.value=level;if(num)num.value=level;
     }
     syncShapeStyleUI(selected=this.getSelectedElements()){
       const shapeTypes=new Set(['path','rect','ellipse','triangle','diamond','hexagon','star','cloud']);
@@ -2427,7 +2433,11 @@
         else this.setStyle('color',e.target.value,null,'.color-dot');
       });
       customColor.addEventListener('change',()=>{this.customColorMode='color';});
-      $$('.size-option').forEach(b=>b.addEventListener('click',()=>{const level=Number(b.dataset.size);if(!this.setMindFontSizeLevel(level,b))this.setStyle('size',level,b,'.size-option');}));
+      const applySizeValue=(val,commit)=>{let level=Number(val);if(!(level>=1))return;const nodes=this.getSelectedElements().filter(el=>el.type==='mindnode');if(nodes.length){const levels=[2,4,8,14];const lv=levels.reduce((best,l)=>Math.abs(l-level)<Math.abs(best-level)?l:best,4);const fs=this.mindFontSizeForLevel(lv);for(const node of nodes){node.fontSize=fs;this.updateMindNodeMetrics(node);}this.syncSizeLevelUI(lv);}else{this.currentSize=level;for(const el of this.getSelectedElements()){if(el.type==='mindnode')continue;el.size=level;}this.syncSizeLevelUI(level);}if(commit)this.commit();this.render();};
+$('#size-slider')?.addEventListener('input',e=>applySizeValue(e.target.value,false));
+$('#size-slider')?.addEventListener('change',e=>applySizeValue(e.target.value,true));
+$('#size-number')?.addEventListener('input',e=>applySizeValue(e.target.value,false));
+$('#size-number')?.addEventListener('change',e=>applySizeValue(e.target.value,true));
       $$('.dash-option').forEach(b=>b.addEventListener('click',()=>this.setStyle('dash',b.dataset.dash,b,'.dash-option')));
       $$('.fill-option').forEach(b=>b.addEventListener('click',()=>this.setStyle('fill',b.dataset.fill,b,'.fill-option')));
       $$('.stroke-option').forEach(b=>b.addEventListener('click',()=>this.setStyle('stroke',b.dataset.stroke,b,'.stroke-option')));
@@ -3006,7 +3016,7 @@
 
     setStyle(kind,value,button,selector){
       if(kind==='color'){this.currentColor=value;}
-      if(kind==='size')this.currentSize=value;if(kind==='dash')this.currentDash=value;if(kind==='fill')this.currentFill=value;if(kind==='stroke')this.currentStroke=value;
+      if(kind==='size'){this.currentSize=value;this.syncSizeLevelUI?.(value);}if(kind==='dash')this.currentDash=value;if(kind==='fill')this.currentFill=value;if(kind==='stroke')this.currentStroke=value;
       if(button)$$(selector).forEach(x=>x.classList.toggle('active',x===button));else if(kind==='color')$$('.color-dot').forEach(x=>x.classList.remove('active'));
       const geoTypes=new Set(['path','rect','ellipse','triangle','diamond','hexagon','star','cloud']);const targets=this.getSelectedElements();let changed=false;
       for(const el of targets){if(kind==='stroke'&&!geoTypes.has(el.type))continue;if(kind==='size'&&el.type==='mindnode')continue;if(kind==='color'){el.color=value;if(el.type==='path'){el.fillColor=value;el.strokeColor=value;}}else el[kind]=value;changed=true;}if(changed){this.commit();this.render();}
