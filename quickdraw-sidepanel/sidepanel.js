@@ -2491,12 +2491,9 @@ $('#size-number')?.addEventListener('change',e=>applySizeValue(e.target.value,tr
       $('#storage-confirm').addEventListener('click',()=>this.confirmClearStorage());
       $('#storage-dialog').addEventListener('pointerdown',e=>{if(e.target===$('#storage-dialog'))this.closeStorageDialog();});
       $('#btn-export-jpg').addEventListener('click',()=>{this.exportJPG();this.closePopovers();});
-      $('#btn-export-png').addEventListener('click',()=>{this.exportPNG(false);this.closePopovers();});
       $('#btn-export-transparent').addEventListener('click',()=>{this.exportPNG(true);this.closePopovers();});
       $('#btn-export-svg').addEventListener('click',()=>{this.exportSVG();this.closePopovers();});
       $('#btn-export-directory').addEventListener('click',()=>this.setDefaultExportDirectory());
-      $('#btn-copy-png').addEventListener('click',()=>{this.exportSelection('png');this.closePopovers();});
-      $('#btn-copy-svg').addEventListener('click',()=>{this.exportSelection('svg');this.closePopovers();});
       $('#btn-export-project').addEventListener('click',()=>{this.exportProject();this.closePopovers();});
       $('#btn-import-project').addEventListener('click',()=>{$('#project-input').click();this.closePopovers();});
       $('#project-input').addEventListener('change',e=>{const file=e.target.files?.[0];if(file)this.importProject(file);e.target.value='';});
