@@ -51,6 +51,7 @@ build/
 *.bak
 *.tmp
 *.temp
+log/
 
 # Local user / agent data
 .codebuddy/

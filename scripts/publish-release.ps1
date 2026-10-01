@@ -12,7 +12,7 @@ $account = Invoke-RestMethod -Uri 'https://api.github.com/user' -Headers $header
 if ($account.login -ne 'baize7815') { throw "Authenticated account is $($account.login), expected baize7815" }
 Write-Output "Authenticated GitHub account: $($account.login)"
 if ($InspectOnly) { exit 0 }
-$version = (Get-Content -LiteralPath (Join-Path $projectRoot 'manifest.json') -Raw | ConvertFrom-Json).version
+$version = (Get-Content -LiteralPath (Join-Path $projectRoot 'quickdraw-sidepanel/manifest.json') -Raw | ConvertFrom-Json).version
 $repo = 'https://api.github.com/repos/baize7815/quickdraw-sidepanel'
 $tag = "v$version"
 $archive = Join-Path $projectRoot "dist/quickdraw-sidepanel-v$version.zip"

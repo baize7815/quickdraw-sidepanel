@@ -23,11 +23,6 @@
   const DOUBAO_IMAGE_ORIGINS = Object.freeze(['https://*.doubao.com/*', 'https://*.byteimg.com/*']);
   const GROK_ORIGINS = Object.freeze(['https://grok.com/*']);
   const GROK_AUTH_ORIGINS = Object.freeze(['https://accounts.x.ai/*']);
-  const DOLA_ORIGINS = Object.freeze(['https://www.dola.com/*', 'https://dola.com/*']);
-  // Result images may be served from a Dola-owned CDN host that is only known
-  // at reply time; getOutputPermissionOrigins() still requests the exact reply
-  // origin on demand, so this list only covers the known first-party hosts.
-  const DOLA_IMAGE_ORIGINS = Object.freeze(['https://www.dola.com/*', 'https://*.dola.com/*']);
   const STAGES = Object.freeze({
     queued: Object.freeze({ timeout: 30_000, order: 0 }),
     'page-loading': Object.freeze({ timeout: 120_000, order: 1 }),
@@ -67,16 +62,6 @@
       origins: GROK_ORIGINS,
       authOrigins: GROK_AUTH_ORIGINS,
       imageOrigins: Object.freeze([]),
-      maxInputImages: MAX_INPUT_IMAGES
-    }),
-    dola: Object.freeze({
-      id: 'dola',
-      label: 'Dola',
-      enabled: true,
-      capabilities: Object.freeze({ text: false, mermaid: false, image: true }),
-      origins: DOLA_ORIGINS,
-      authOrigins: Object.freeze([]),
-      imageOrigins: DOLA_IMAGE_ORIGINS,
       maxInputImages: MAX_INPUT_IMAGES
     }),
     deepseek: Object.freeze({
@@ -538,12 +523,6 @@
     return limitText(userPrompt, MAX_PROMPT_LENGTH).trim();
   }
 
-  function buildDolaImagePrompt(userPrompt, taskId = '') {
-    // Same contract as the other image providers: send exactly the user text;
-    // the content script matches the sent bubble via its pre-send baseline.
-    return limitText(userPrompt, MAX_PROMPT_LENGTH).trim();
-  }
-
   function normalizeInputAssets(input = {}, kind = 'mindmap') {
     if (kind !== 'image-edit') return [];
     const candidates = Array.isArray(input.inputAssets) ? input.inputAssets : [];
@@ -664,8 +643,6 @@
     DOUBAO_IMAGE_ORIGINS,
     GROK_ORIGINS,
     GROK_AUTH_ORIGINS,
-    DOLA_ORIGINS,
-    DOLA_IMAGE_ORIGINS,
     PROVIDERS,
     DIAGRAM_TYPES,
     ACTIVE_STATUSES,
@@ -681,7 +658,6 @@
     buildDoubaoPrompt,
     buildDoubaoImagePrompt,
     buildGrokImagePrompt,
-    buildDolaImagePrompt,
     validateMermaid,
     normalizeMermaidResponse,
     parseMermaidDiagram,

@@ -55,41 +55,35 @@
       <button id="btn-duplicate" class="icon-btn selection-action" title="复制所选" disabled>
         <svg viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
       </button>
-      <button id="btn-arrange" class="icon-btn selection-action" title="对齐与分布" aria-label="对齐与分布" disabled>
-        <svg viewBox="0 0 24 24"><path d="M4 4v16M8 7h9v4H8zM8 14h12v4H8z"/></svg>
+      <button id="btn-opacity" class="icon-btn selection-action" title="不透明度" aria-label="不透明度" disabled>
+        <svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 11L14 33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 26L30 26" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 11L34 33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <button id="btn-clear-action" class="icon-btn danger-btn" title="清空画板" aria-label="清空画板">
         <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6"/></svg>
       </button>
       <div id="crop-divider" class="bar-divider horizontal" hidden></div>
       <button id="btn-remove-bg" class="icon-btn selection-action remove-bg-action" title="AI 抠图（多选时逐张处理）" aria-label="AI 抠图（多选时逐张处理）" hidden>
-        <svg viewBox="0 0 24 24"><path d="M5 3H3v2M19 3h2v2M5 21H3v-2M19 21h2v-2"/><path d="m13.5 5 .7 2.1L16.5 8l-2.3.9-.7 2.1-.8-2.1-2.2-.9 2.2-.9z"/><path d="M7 17c1.2-3.1 2.9-4.6 5-4.6s3.8 1.5 5 4.6"/><circle cx="12" cy="10" r="2"/></svg>
+        <svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M20.1005 8.1005L24.3431 12.3431M30 4V10V4ZM39.8995 8.1005L35.6569 12.3431L39.8995 8.1005ZM44 18H38H44ZM39.8995 27.8995L35.6569 23.6569L39.8995 27.8995ZM30 32V26V32ZM20.1005 27.8995L24.3431 23.6569L20.1005 27.8995ZM16 18H22H16Z" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M29.5856 18.4143L5.54395 42.4559" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <button id="btn-remove-watermark" class="icon-btn selection-action watermark-action" title="Telea 去水印（框选水印区域）" aria-label="Telea 去水印（框选水印区域）" hidden>
-        <svg viewBox="0 0 24 24"><path d="m4 16 8-8 4 4-8 8H4z"/><path d="m13.5 4 .6 1.8 1.9.7-1.9.7-.6 1.8-.7-1.8-1.8-.7 1.8-.7z"/><path d="M9 19h10"/></svg>
+        <svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M4 42H44" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M31 4L7 28L13 34H21L41 14L31 4Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <button id="btn-crop" class="icon-btn selection-action crop-action" title="单击自由裁剪 · 双击设置比例" aria-label="单击自由裁剪，双击设置比例" hidden>
         <svg viewBox="0 0 24 24"><path d="M7 3v13a2 2 0 0 0 2 2h12M3 7h13a2 2 0 0 1 2 2v12"/></svg>
       </button>
       <div class="bar-divider horizontal ai-action-divider"></div>
       <button id="btn-ai-mindmap" class="icon-btn ai-mindmap-action" title="AI 脑图" aria-label="AI 脑图">
-        <svg viewBox="0 0 24 24"><path d="M5 6.5h5v4H5zM14 3.5h5v4h-5zM14 16.5h5v4h-5z"/><path d="M10 8.5h2a2 2 0 0 0 2-2M10 8.5h2a2 2 0 0 1 2 2v6"/><path d="m19 2 .4 1.1L20.5 3.5 19.4 4z"/></svg>
+        <svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M5 24L43 24" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 4H20C18.8954 4 18 4.89543 18 6V14C18 15.1046 18.8954 16 20 16H28C29.1046 16 30 15.1046 30 14V6C30 4.89543 29.1046 4 28 4Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M16 32H8C6.89543 32 6 32.8954 6 34V42C6 43.1046 6.89543 44 8 44H16C17.1046 44 18 43.1046 18 42V34C18 32.8954 17.1046 32 16 32Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M40 32H32C30.8954 32 30 32.8954 30 34V42C30 43.1046 30.8954 44 32 44H40C41.1046 44 42 43.1046 42 42V34C42 32.8954 41.1046 32 40 32Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24 24V16M36 32V24M12 32V24" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <button id="btn-ai-edit" class="icon-btn selection-action ai-mindmap-action" title="AI 图片编辑 / 文生图" aria-label="AI 图片编辑 / 文生图">
         <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5z"/><circle cx="9" cy="9" r="1.5"/><path d="m5 17 4.5-4.5 3 3 2.2-2.2L20 18"/></svg>
       </button>
     </aside>
-    <div id="arrange-popover" class="popover arrange-popover" hidden aria-label="对齐与分布">
-      <div class="arrange-label">对象对齐</div>
-      <div class="arrange-grid">
-        <button data-align="left" title="左对齐 Alt+L">左</button><button data-align="hcenter" title="水平居中">中</button><button data-align="right" title="右对齐 Alt+R">右</button>
-        <button data-align="top" title="顶对齐 Alt+T">顶</button><button data-align="vcenter" title="垂直居中">中</button><button data-align="bottom" title="底对齐 Alt+B">底</button>
-      </div>
-      <div class="arrange-divider"></div>
-      <button class="arrange-wide" data-distribute="x">横向等间距</button>
-      <button class="arrange-wide" data-distribute="y">纵向等间距</button>
-      <button class="arrange-wide" id="btn-layout-mind">自动整理分支</button>
-      <button class="arrange-wide" id="btn-collapse-mind">折叠 / 展开分支</button>
+    <div id="opacity-popover" class="popover opacity-popover" hidden role="dialog" aria-label="不透明度">
+      <label for="opacity-slider">不透明度 <output id="opacity-output">100%</output></label>
+      <input id="opacity-slider" type="range" min="0" max="100" step="1" value="100" aria-label="不透明度百分比">
+      <input id="opacity-number" type="number" min="0" max="100" step="1" value="100" aria-label="不透明度百分比数值">
+      <div id="opacity-hint" class="opacity-hint"></div>
     </div>
 
     <nav class="dock" id="main-toolbar" aria-label="绘图工具">
@@ -130,6 +124,7 @@
 
     <div id="shape-popover" class="popover shape-popover" hidden>
       <button data-shape="rect" class="shape-option active" title="矩形"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></button>
+      <button data-shape="roundrect" class="shape-option" title="圆角矩形"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/></svg></button>
       <button data-shape="ellipse" class="shape-option" title="椭圆"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>
       <button data-shape="triangle" class="shape-option" title="三角形"><svg viewBox="0 0 24 24"><path d="m12 3 10 18H2z"/></svg></button>
       <button data-shape="diamond" class="shape-option" title="菱形"><svg viewBox="0 0 24 24"><path d="m12 2 10 10-10 10L2 12z"/></svg></button>
@@ -157,8 +152,8 @@
       </div>
       <div class="style-card line-card">
         <div class="style-row size-row">
-          <input id="size-slider" type="range" min="1" max="30" step="1" value="4" title="线条粗细（拖动或输入数字）" aria-label="线条粗细">
-          <input id="size-number" class="size-number" type="number" min="1" max="30" step="1" value="4" title="线条粗细数值" aria-label="线条粗细数值">
+          <input id="size-slider" type="range" min="1" max="20" step="1" value="3" title="线条粗细（1–20）" aria-label="线条粗细">
+          <input id="size-number" class="size-number" type="number" min="1" max="20" step="1" value="3" title="线条粗细数值（1–20）" aria-label="线条粗细数值">
         </div>
         <div class="style-row">
           <button class="style-option dash-option active" data-dash="solid" title="实线"><svg viewBox="0 0 24 24"><path d="M4 12h16"/></svg></button>
@@ -173,7 +168,6 @@
         </div>
         <div class="style-row">
           <button class="style-option fill-option active" data-fill="none" title="无填充"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
-          <button class="style-option fill-option" data-fill="semi" title="半透明"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" fill-opacity=".18"/></svg></button>
           <button class="style-option fill-option" data-fill="solid" title="实心"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" fill-opacity=".5"/></svg></button>
           <button class="style-option fill-option" data-fill="pattern" title="斜线"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="m6 15 9-9M9 18l9-9"/></svg></button>
         </div>
@@ -205,7 +199,8 @@
     </div>
 
     <div id="menu-popover" class="popover menu-popover" hidden>
-      <button class="menu-item" id="btn-export-png"><span>导出 PNG</span><kbd>⇧E</kbd></button>
+      <button class="menu-item" id="btn-export-jpg"><span>导出 JPG</span><kbd>Ctrl/⌘ E</kbd></button>
+      <button class="menu-item" id="btn-export-png"><span>导出 PNG</span></button>
       <button class="menu-item" id="btn-export-transparent"><span>导出透明 PNG</span></button>
       <button class="menu-item" id="btn-export-svg"><span>导出 SVG（可编辑矢量）</span></button>
       <button class="menu-item" id="btn-export-directory"><span>默认导出路径</span><span class="menu-value" id="export-directory-label">浏览器默认</span></button>
@@ -252,7 +247,7 @@
       <div class="ai-dialog">
         <div class="ai-dialog-title" id="ai-mindmap-dialog-title">AI 脑图</div>
         <div class="ai-provider-row">
-          <div class="ai-provider-field"><label for="ai-task-provider">AI平台</label><select id="ai-task-provider" class="provider-select"><option value="gpt">GPT</option><option value="doubao">豆包</option><option value="grok">Grok</option><option value="dola">Dola</option></select></div>
+          <div class="ai-provider-field"><label for="ai-task-provider">AI平台</label><select id="ai-task-provider" class="provider-select"><option value="gpt">GPT</option><option value="doubao">豆包</option><option value="grok">Grok</option></select></div>
           <div id="ai-diagram-preset-field" class="ai-provider-field"><label for="ai-diagram-preset">图表预设</label><select id="ai-diagram-preset" class="provider-select" aria-label="Mermaid 图表预设"><option value="flowchart">Flowchart 流程图</option><option value="sequence">Sequence Diagram 时序图</option><option value="state">State Diagram 状态图</option><option value="gantt">Gantt 甘特图</option><option value="class">Class Diagram 类图</option></select></div>
           <div id="ai-image-preset-field" class="ai-provider-field"><label for="ai-image-preset">提示词预设</label><select id="ai-image-preset" class="provider-select" aria-label="提示词预设"><option value="">选择预设</option></select></div>
           <span id="ai-task-status" class="ai-task-status">准备就绪</span>
@@ -320,7 +315,10 @@
     </div>
   </div>
   <script src="core-utils.js"></script>
+  <script src="document-model.js"></script>
+  <script src="group-utils.js"></script>
   <script src="vector-utils.js"></script>
+  <script src="svg-import.js"></script>
   <script src="editing-tools.js"></script>
   <script src="storage.js"></script>
   <script src="zip-utils.js"></script>

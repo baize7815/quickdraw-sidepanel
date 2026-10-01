@@ -4,11 +4,12 @@
 
 - Chinese product name: Quickdraw 侧边栏画板
 - English name: Quickdraw Sidepanel
-- Current manifest version: 3.7.4
+- Current manifest version: 3.9.0
 - Minimum Chrome version: 116
 - License for new extension code: MIT
 - Runtime: vanilla HTML, CSS, and JavaScript; no npm runtime; no tldraw SDK; no bundler required
-- Primary UI: `sidepanel.html`, opened from the Chrome Side Panel action
+- Loadable extension root: `quickdraw-sidepanel/`
+- Primary UI: `quickdraw-sidepanel/sidepanel.html`, opened from the Chrome Side Panel action
 - Same board can also open in a full browser tab
 - Human documentation (English, GitHub default): `README.md`
 - Human documentation (Simplified Chinese): `README.zh-CN.md`
@@ -62,6 +63,7 @@ On-canvas operations:
 - Free crop or ratio crop: 1:1, 9:16, 16:9, 3:4, 4:3, custom. Click crop for free crop; double-click to choose a ratio
 - Grid slicing with presets or custom rows/columns, maximum 100 slices
 - Image masking with an upper shape or path: intersection, subtraction, splitting. Result is a transparent PNG
+- Shape-to-shape Boolean intersection, subtraction, and splitting. Results remain editable vector paths
 - Transparent-image contour tracing via bundled OpenCV.js. Reads alpha, can preserve holes, produces a separate SVG path with independent fill and stroke. Does not recover internal colored artwork. Opaque images usually yield only an outer frame
 - Local Telea inpainting/watermark cleanup in the OpenCV sandbox. The image is not uploaded for this operation
 - Online background removal through Koukoutu. The selected image is uploaded, polled, and stored locally. Multi-select processes images one by one
@@ -135,7 +137,7 @@ Shared AI rules:
 1. Download and extract the repository.
 2. Open `chrome://extensions/`.
 3. Enable Developer mode.
-4. Load unpacked and select the folder that contains `manifest.json`.
+4. Load unpacked. For repository source, select `quickdraw-sidepanel/`; a release ZIP extracts with `manifest.json` at its root.
 5. Click the Quickdraw action to open the side panel.
 6. Grant a provider or image origin only when that feature is needed.
 
@@ -158,25 +160,26 @@ Screenshots and diagrams:
 
 ## Source map
 
-- `manifest.json` — Manifest V3 metadata, permissions, icons, sandbox, Chrome minimum version
-- `sidepanel.html` — UI structure and script order
-- `sidepanel.css` — layout, themes, toolbars
-- `sidepanel.js` — canvas state, tools, boards, import, export
-- `editing-tools.js` — pen, transform, crop, mask, slice
-- `vector-utils.js` — path and geometry helpers
-- `storage.js` — Chrome storage, IndexedDB assets/versions/handles, object URL lifecycle
-- `background.js` — side panel opening, context menus, captures, AI routing entry
-- `ai-protocol.js` — provider capabilities, origins, prompt/task limits, Mermaid validation
-- `ai-router.js` — task lifecycle, tab binding, recovery, import coordination
-- `ai-task-store.js` — persisted AI task records
-- `ai-gpt-provider.js`, `gpt-content.js` — ChatGPT web integration
-- `ai-doubao-provider.js`, `doubao-content.js` — Doubao web integration
-- `ai-grok-provider.js`, `grok-content.js` — Grok image-task integration
-- `ai-image-utils.js`, `ai-image-presets.js` — image payload/result helpers
-- `koukoutu-client.js` — background-removal client
-- `opencv-sandbox.html`, `opencv-sandbox.js`, `vendor/` — local OpenCV contour and Telea processing
-- `tests/` — unit, lifecycle, and browser regression tests
-- `LICENSE`, `LICENSE_QUICKDRAW.txt`, `LICENSE_OPENCV.txt` — license texts
+- `quickdraw-sidepanel/manifest.json` — Manifest V3 metadata, permissions, icons, sandbox, Chrome minimum version
+- `quickdraw-sidepanel/sidepanel.html` — UI structure and script order
+- `quickdraw-sidepanel/sidepanel.css` — layout, themes, toolbars
+- `quickdraw-sidepanel/sidepanel.js` — canvas state, tools, boards, import, export
+- `quickdraw-sidepanel/editing-tools.js` — pen, transform, crop, mask, slice, shape Boolean operations
+- `quickdraw-sidepanel/vector-utils.js` — path and geometry helpers
+- `quickdraw-sidepanel/storage.js` — Chrome storage, IndexedDB assets/versions/handles, object URL lifecycle
+- `quickdraw-sidepanel/background.js` — side panel opening, context menus, captures, AI routing entry
+- `quickdraw-sidepanel/ai-protocol.js` — provider capabilities, origins, prompt/task limits, Mermaid validation
+- `quickdraw-sidepanel/ai-router.js` — task lifecycle, tab binding, recovery, import coordination
+- `quickdraw-sidepanel/ai-task-store.js` — persisted AI task records
+- `quickdraw-sidepanel/ai-gpt-provider.js`, `quickdraw-sidepanel/gpt-content.js` — ChatGPT web integration
+- `quickdraw-sidepanel/ai-doubao-provider.js`, `quickdraw-sidepanel/doubao-content.js` — Doubao web integration
+- `quickdraw-sidepanel/ai-grok-provider.js`, `quickdraw-sidepanel/grok-content.js` — Grok image-task integration
+- `quickdraw-sidepanel/ai-image-utils.js`, `quickdraw-sidepanel/ai-image-presets.js` — image payload/result helpers
+- `quickdraw-sidepanel/koukoutu-client.js` — background-removal client
+- `quickdraw-sidepanel/opencv-sandbox.html`, `quickdraw-sidepanel/opencv-sandbox.js`, `quickdraw-sidepanel/vendor/` — local OpenCV contour and Telea processing
+- `tests/` — unit and lifecycle regression tests
+- `LICENSE` — repository license
+- `quickdraw-sidepanel/LICENSE_QUICKDRAW.txt`, `quickdraw-sidepanel/LICENSE_OPENCV.txt` — bundled dependency/upstream license texts
 
 ## Tests
 

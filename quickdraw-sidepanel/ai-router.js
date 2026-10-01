@@ -26,7 +26,6 @@
       this.providers = { gpt: new globalThis.QuickdrawGPTProvider(this.assetStore) };
       if (globalThis.QuickdrawDoubaoProvider) this.providers.doubao = new globalThis.QuickdrawDoubaoProvider(this.assetStore);
       if (globalThis.QuickdrawGrokProvider) this.providers.grok = new globalThis.QuickdrawGrokProvider(this.assetStore);
-      if (globalThis.QuickdrawDolaProvider) this.providers.dola = new globalThis.QuickdrawDolaProvider(this.assetStore);
       this.operationQueue = Promise.resolve();
       this.restorePassiveTaskIds = new Set();
       // In-memory setTimeout timers are lost when the MV3 service worker is
@@ -54,6 +53,10 @@
       const now = Date.now();
       const restartable = [];
       for (const task of tasks) {
+        if (task.provider === 'dola') {
+          if (AI.isActiveTask(task)) await this.update(task, { status: 'needs-attention', error: 'Dola 接入已移除；旧任务已停止，已保存的生成结果仍保留。', deadlineAt: null, stageDeadlineAt: 0 });
+          continue;
+        }
         if (task.status === 'importing') {
           await this.update(task, { status: task.kind === 'image-edit' ? 'image-ready' : 'pending', error: '上次导入未完成，结果已保留，可手动重试。', claimedBy: null, claimedAt: null, deadlineAt: null });
           continue;
@@ -760,7 +763,7 @@
           this.release(paused);
           return { ok: true, paused: true, task: paused };
         }
-        if (message.code === 'raw-image-unavailable' && ['doubao', 'dola'].includes(task.provider) && task.kind === 'image-edit') {
+        if (message.code === 'raw-image-unavailable' && task.provider === 'doubao' && task.kind === 'image-edit') {
           await this.stopListener(task);
           const paused = await this.update(task, { status: 'paused', pauseReason: 'raw-image-unavailable', pausedAt: Date.now(), error: AI.limitText(message.error || '无水印原图暂不可读取。', 1_000), deadlineAt: null, stageDeadlineAt: 0, seenEventKeys: nextSeen });
           this.release(paused);

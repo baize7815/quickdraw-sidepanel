@@ -61,7 +61,7 @@ Quickdraw 不是 Figma，也不是完整的 Photoshop。它把「看网页时顺
 
 ## 快速安装
 
-**最新发行版：[v3.8.8](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.8.8)**，补回文档配图，并加入 B 站使用教程。[下载安装包](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.8.8/quickdraw-sidepanel-v3.8.8.zip)并解压，按下方步骤加载包含 `manifest.json` 的目录。
+**最新发行版：[v3.9.0](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.9.0)**，新增形状与形状的布尔运算，完善分组/对齐与编辑体验，并把可加载扩展与仓库测试、文档分离。[下载安装包](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.9.0/quickdraw-sidepanel-v3.9.0.zip)并解压，按下方步骤加载包含 `manifest.json` 的目录。
 
 更多菜单中的“检查更新”只在点击时访问 GitHub，不进行每日或后台定时检查。发现新版后点击下载，先导出项目备份，再解压覆盖原扩展目录，在扩展管理页点击“重新加载”并重开侧边栏；无需卸载扩展。
 
@@ -69,10 +69,10 @@ Quickdraw 不是 Figma，也不是完整的 Photoshop。它把「看网页时顺
 
 ![四步加载未打包扩展：下载、打开扩展页、开发者模式、加载含 manifest.json 的文件夹](docs/images/install.svg)
 
-1. 在 GitHub 仓库顶部点击 **Code → Download ZIP**，解压。
+1. 下载 Release 安装包，或在 GitHub 仓库顶部点击 **Code → Download ZIP** 下载源码，然后解压。
 2. 在 Chrome 地址栏打开 `chrome://extensions/`。
 3. 打开右上角 **开发者模式**。
-4. 点击 **加载已解压的扩展程序**，选择直接包含 `manifest.json` 的文件夹。
+4. 点击 **加载已解压的扩展程序**。Release 安装包选择解压后直接包含 `manifest.json` 的目录；源码仓库请选择 `quickdraw-sidepanel/`。
 5. 在扩展菜单里找到 **Quickdraw 侧边栏画板**，可固定到工具栏；点击图标打开画板。
 
 不需要运行 `npm install`、启动后端或配置构建工具。请保留加载后的扩展目录，浏览器会继续从这个位置读取文件。
@@ -96,7 +96,7 @@ GitHub 若显示文件内容，用文件页的 **Download raw file** 下载，�
 
 在普通网页上选中文字，右键选择 **发送选中文字到 Quickdraw**。它会进入画板，接着可以插入图片、放上便签，用画笔和箭头标出关联。网页图片对应 **发送图片到 Quickdraw**；可见页面截图对应 **截取当前可见页面到 Quickdraw**。
 
-浏览器内部页面、部分受限网页或没有访问权限的图片可能无法采集。也可以通过底部图片按钮、拖拽或粘贴导入本地素材。图片选择器支持一次多选，也可以将多个图片文件一起拖到画板上。批量图片会按网格间隔排列并一起选中，仍是独立对象，支持一次撤销。无法读取或过大的文件会提示并跳过，其余图片正常导入；单张上限为 25 MB、5000 万像素。
+浏览器内部页面、部分受限网页或没有访问权限的图片可能无法采集。也可以通过底部图片按钮、拖拽或粘贴导入本地素材。图片选择器支持一次多选，也可以将多个图片文件一起拖到画板上。批量图片会按网格间隔排列、自动成组并一起选中，支持一次撤销；需要独立编辑时再取消组合。无法读取或过大的文件会提示并跳过，其余图片正常导入；单张上限为 25 MB、5000 万像素。
 
 ### 把 Mermaid 变成可编辑流程图
 
@@ -138,7 +138,7 @@ flowchart LR
 
 选中一张透明图片，使用轮廓提取工具，就能在原图旁生成独立矢量形状。原图会保留，你可以继续改颜色、启用描边、旋转或编辑路径节点。
 
-**这里提取的是透明度轮廓。** 它可以保留孔洞，但不会自动还原照片或插画内部的配色与细节；没有透明背景的图片通常只能提取到外框。外部复杂 SVG 导入时也不会自动拆成全部原生节点。
+**这里提取的是透明度轮廓。** 它可以保留孔洞，但不会自动还原照片或插画内部的配色与细节；没有透明背景的图片通常只能提取到外框。复制到画布的静态 SVG 也可以在安全子集内转换为可编辑原生矢量路径；脚本、外部资源、文字、滤镜、遮罩、渐变、样式表等活动或不支持的内容会被拒绝。
 
 另外，画板还支持：
 
@@ -172,6 +172,7 @@ AI 是可选增强，基础画板不依赖它。当前接入通过相应平台�
 
 | 格式 / 入口 | 适合用途 | 需要知道的区别 |
 | --- | --- | --- |
+| JPG | 分享、汇报、插入文档 | 白底视觉快照；`Ctrl / ⌘ + E` |
 | PNG | 分享、汇报、插入文档 | 导出画板的视觉结果 |
 | 透明 PNG | 素材贴图、叠加排版 | 不包含画布背景 |
 | SVG | 继续矢量排版、缩放展示 | 文字和原生形状保持矢量；图片仍以位图嵌入 |
@@ -202,6 +203,7 @@ AI 是可选增强，基础画板不依赖它。当前接入通过相应平台�
 | 确认 / 取消裁剪 | 裁剪框内双击 / `Esc` |
 | 分组 / 取消分组 | `Ctrl / ⌘ + G` / `Ctrl / ⌘ + Shift + G` |
 | 搜索画板文字 | `Ctrl / ⌘ + F` |
+| 导出 JPG | `Ctrl / ⌘ + E` |
 | 所选对象水平 + 垂直同时居中 | `Alt + C` |
 | 删除所选对象或连线 | `Delete` / `Backspace` |
 
@@ -223,7 +225,7 @@ Quickdraw 本身不提供或要求单独的项目账号；第三方 AI 平台仍
 
 在线抠图的校验模块会在本地读取浏览器标识、语言、视口、时区和近期指针轨迹，再生成随抠图任务提交的校验码。源码没有把这些原始字段作为独立表单字段发送，但校验码由这些信息生成。
 
-扩展权限包括侧边栏、存储、右键菜单、下载、当前标签页、剪贴板写入、脚本注入与标签分组，分别用于相应功能。清单预先声明 koukoutu 域名权限，其他网站访问权限按流程请求；以 [manifest.json](manifest.json) 为准。
+扩展权限包括侧边栏、存储、右键菜单、下载、当前标签页、剪贴板写入、脚本注入与标签分组，分别用于相应功能。清单预先声明 koukoutu 域名权限，其他网站访问权限按流程请求；以 [quickdraw-sidepanel/manifest.json](quickdraw-sidepanel/manifest.json) 为准。
 
 ### 存储占用说明
 
@@ -280,20 +282,22 @@ Quickdraw 本身不提供或要求单独的项目账号；第三方 AI 平台仍
 扩展可以直接加载源码运行。代码按画板、图片处理、存储和 AI 页面适配拆分：
 
 ```text
-manifest.json            扩展入口与权限
-sidepanel.html / .css    画板界面
-sidepanel.js             画布、交互、文件和导出
-editing-tools.js         钢笔、变换与图片操作
-vector-utils.js          矢量路径及几何计算
-storage.js               本地资产、历史和 IndexedDB
-background.js            侧边栏、网页采集与后台入口
-ai-protocol.js           平台能力、任务定义与 Mermaid 校验
-ai-router.js             AI 任务路由、恢复与结果导入
-ai-*-provider.js         AI 平台适配
-*-content.js             对应 AI 网页的内容脚本
-opencv-sandbox.*         本地 OpenCV 沙箱
-tests/                   单元、生命周期与浏览器回归
+quickdraw-sidepanel/     可直接加载的扩展根目录
+  manifest.json          扩展入口与权限
+  sidepanel.html / .css  画板界面
+  sidepanel.js           画布、交互、文件和导出
+  editing-tools.js       钢笔、变换与图片操作
+  vector-utils.js        矢量路径及几何计算
+  storage.js             本地资产、历史和 IndexedDB
+  background.js          侧边栏、网页采集与后台入口
+  ai-protocol.js         平台能力、任务定义与 Mermaid 校验
+  ai-router.js           AI 任务路由、恢复与结果导入
+  ai-*-provider.js       AI 平台适配
+  *-content.js           对应 AI 网页的内容脚本
+  opencv-sandbox.*       本地 OpenCV 沙箱
+tests/                   单元与生命周期回归
 docs/                    演示截图、示意图和可导入示例
+scripts/                 打包与发行辅助脚本
 llms.txt                 面向 AI 检索与引用的项目摘要
 README.md                英文文档（GitHub 默认）
 ```

@@ -61,7 +61,7 @@ Quickdraw is not Figma and not Photoshop. It finishes the job of “note it, dra
 
 ## Install
 
-**Latest release: [v3.8.8](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.8.8)** — restores documentation images and adds the Bilibili walkthrough. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.8.8/quickdraw-sidepanel-v3.8.8.zip), extract it, and load the folder containing `manifest.json` using the steps below.
+**Latest release: [v3.9.0](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.9.0)** — adds shape-to-shape Boolean operations, refines grouping/alignment and editing behavior, and separates the loadable extension from repository docs/tests. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.9.0/quickdraw-sidepanel-v3.9.0.zip), extract it, and load the folder containing `manifest.json` using the steps below.
 
 Use **Check for updates** in the More menu to check GitHub manually; there are no periodic checks. Updating an unpacked extension requires extracting the new ZIP over the original folder and clicking Reload in the extension manager. Export a project backup first; do not uninstall the extension.
 
@@ -69,10 +69,10 @@ The public install path is unpacked source. Use desktop **Chrome 116 or newer**.
 
 ![Four-step unpacked install: download, open chrome://extensions, enable Developer mode, load the folder that contains manifest.json](docs/images/install.svg)
 
-1. On GitHub, click **Code → Download ZIP** and extract it.
+1. Download the release ZIP, or use **Code → Download ZIP** for the source repository, then extract it.
 2. Open `chrome://extensions/` in Chrome.
 3. Turn on **Developer mode** in the top-right corner.
-4. Click **Load unpacked** and select the folder that directly contains `manifest.json`.
+4. Click **Load unpacked**. For a release ZIP, select the extracted folder containing `manifest.json`; for the source repository, select `quickdraw-sidepanel/`.
 5. Find **Quickdraw 侧边栏画板** in the extensions menu, optionally pin it, and click the icon to open the board.
 
 You do not need `npm install`, a backend, or a bundler. Keep the loaded directory in place; Chrome keeps reading files from that path.
@@ -96,7 +96,7 @@ If GitHub shows the file contents, use **Download raw file** and keep the `.quic
 
 On a normal webpage, select text and right-click **发送选中文字到 Quickdraw** (Send selected text to Quickdraw). It lands on the board; you can then drop in images, add notes, and mark relationships with pens and arrows. Images use **发送图片到 Quickdraw**; the visible tab uses **截取当前可见页面到 Quickdraw**.
 
-Chrome internal pages, some restricted sites, and images without granted host access may fail. You can also import local files from the image button, drag-and-drop, or paste. The image picker supports selecting multiple files, and you can drag several image files onto the canvas at once. A batch is spaced into a grid, selected together, and can be undone in one step. Images stay independent; unreadable or oversized files are reported and skipped while valid images are imported. Each image must be within 25 MB and 50 million pixels.
+Chrome internal pages, some restricted sites, and images without granted host access may fail. You can also import local files from the image button, drag-and-drop, or paste. The image picker supports selecting multiple files, and you can drag several image files onto the canvas at once. A batch is spaced into a grid, grouped and selected together, and can be undone in one step; ungroup it when you want independent editing. Unreadable or oversized files are reported and skipped while valid images are imported. Each image must be within 25 MB and 50 million pixels.
 
 ### Turn Mermaid into an editable flowchart
 
@@ -138,7 +138,7 @@ The canvas has light and dark themes, plus square, dot, line, cross, isometric, 
 
 Select a transparent image and run contour tracing to create a separate vector shape beside the original. The source image stays. You can then change fill, enable stroke, rotate, or edit path nodes.
 
-**This traces the alpha contour.** Holes can be preserved, but internal colors and illustration detail are not recovered. Images without a transparent background usually yield only an outer frame. Complex external SVG files are not exploded into native nodes.
+**This traces the alpha contour.** Holes can be preserved, but internal colors and illustration detail are not recovered. Images without a transparent background usually yield only an outer frame. Static SVG copied to the canvas can also be converted into editable native vector paths when it stays inside the supported safe subset; scripts, external resources, text, filters, masks, gradients, stylesheets, and other active or unsupported content are rejected.
 
 The board also supports:
 
@@ -171,6 +171,7 @@ The first use asks for site access; new result-image hosts may need another gran
 
 | Format / entry | Best for | Difference that matters |
 | --- | --- | --- |
+| JPG | Sharing, slides, documents | White-background visual snapshot; `Ctrl / ⌘ + E` |
 | PNG | Sharing, slides, documents | Visual snapshot of the board |
 | Transparent PNG | Stickers and overlays | No canvas background |
 | SVG | Vector layout and scaling | Text and native shapes stay vector; rasters embed as bitmaps |
@@ -201,6 +202,7 @@ Give the board focus first. While editing text, some keys behave as typing.
 | Confirm / cancel crop | Double-click inside the crop box / `Esc` |
 | Group / ungroup | `Ctrl / ⌘ + G` / `Ctrl / ⌘ + Shift + G` |
 | Search board text | `Ctrl / ⌘ + F` |
+| Export JPG | `Ctrl / ⌘ + E` |
 | Delete selection or connector | `Delete` / `Backspace` |
 
 In the pen tool, click to place an anchor and drag for curve handles. Click the start point to close a path, `Enter` to finish an open path, `Esc` to cancel. Selected paths can enter node editing.
@@ -221,7 +223,7 @@ Quickdraw does not provide or require its own project account. Third-party AI pl
 
 The background-removal checksum module reads browser identity, language, viewport, timezone, and recent pointer motion locally, then derives the code submitted with the job. Those raw fields are not sent as separate form fields, but the code is produced from them.
 
-Permissions cover the side panel, storage, context menus, downloads, the active tab, clipboard write, scripting, and tab groups. Koukoutu hosts are declared up front; other site access is requested when a flow needs it. [manifest.json](manifest.json) is authoritative.
+Permissions cover the side panel, storage, context menus, downloads, the active tab, clipboard write, scripting, and tab groups. Koukoutu hosts are declared up front; other site access is requested when a flow needs it. [quickdraw-sidepanel/manifest.json](quickdraw-sidepanel/manifest.json) is authoritative.
 
 ### Storage cost
 
@@ -278,20 +280,22 @@ The public path is unpacked loading so you can read the source, file issues, and
 The extension runs from source. Code is split across the board, image tools, storage, and AI page adapters:
 
 ```text
-manifest.json            entry and permissions
-sidepanel.html / .css    board UI
-sidepanel.js             canvas, interaction, files, export
-editing-tools.js         pen, transform, image operations
-vector-utils.js          path and geometry
-storage.js               local assets, history, IndexedDB
-background.js            side panel, page capture, background entry
-ai-protocol.js           provider capabilities, tasks, Mermaid validation
-ai-router.js             AI routing, recovery, result import
-ai-*-provider.js         provider adapters
-*-content.js             provider page scripts
-opencv-sandbox.*         local OpenCV sandbox
-tests/                   unit, lifecycle, and browser regression
+quickdraw-sidepanel/     loadable extension root
+  manifest.json          entry and permissions
+  sidepanel.html / .css  board UI
+  sidepanel.js           canvas, interaction, files, export
+  editing-tools.js       pen, transform, image operations
+  vector-utils.js        path and geometry
+  storage.js             local assets, history, IndexedDB
+  background.js          side panel, page capture, background entry
+  ai-protocol.js         provider capabilities, tasks, Mermaid validation
+  ai-router.js           AI routing, recovery, result import
+  ai-*-provider.js       provider adapters
+  *-content.js           provider page scripts
+  opencv-sandbox.*       local OpenCV sandbox
+tests/                   unit and lifecycle regression
 docs/                    screenshots, diagrams, importable demos
+scripts/                 packaging and release helpers
 llms.txt                 machine-readable project summary
 README.zh-CN.md          Chinese documentation
 ```

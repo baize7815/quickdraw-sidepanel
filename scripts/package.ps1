@@ -1,11 +1,11 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
-$manifest = Get-Content -LiteralPath (Join-Path $projectRoot 'manifest.json') -Raw | ConvertFrom-Json
+$extensionRoot = Join-Path $projectRoot 'quickdraw-sidepanel'
+$manifest = Get-Content -LiteralPath (Join-Path $extensionRoot 'manifest.json') -Raw | ConvertFrom-Json
 $outputDir = Join-Path $projectRoot 'dist'
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 $archive = Join-Path $outputDir "quickdraw-sidepanel-v$($manifest.version).zip"
-$files = @(Get-ChildItem -LiteralPath $projectRoot -File | Where-Object { $_.Extension -in '.js','.html','.css' -or $_.Name -eq 'manifest.json' -or $_.Name -like 'LICENSE*' -or $_.Name -like 'README*' } | ForEach-Object FullName)
-$files += (Join-Path $projectRoot 'icons'), (Join-Path $projectRoot 'vendor')
+$files = @(Get-ChildItem -LiteralPath $extensionRoot -Force | ForEach-Object FullName)
 Compress-Archive -LiteralPath $files -DestinationPath $archive -Force
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::OpenRead($archive)

@@ -3,12 +3,12 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
-require('../koukoutu-client.js');
-require('../ai-protocol.js');
-require('../ai-gpt-provider.js');
-const Doubao = require('../ai-doubao-provider.js');
-require('../core-utils.js');
-require('../sidepanel.js');
+require('../quickdraw-sidepanel/koukoutu-client.js');
+require('../quickdraw-sidepanel/ai-protocol.js');
+require('../quickdraw-sidepanel/ai-gpt-provider.js');
+const Doubao = require('../quickdraw-sidepanel/ai-doubao-provider.js');
+require('../quickdraw-sidepanel/core-utils.js');
+require('../quickdraw-sidepanel/sidepanel.js');
 const client = () => Object.create(globalThis.QuickdrawKoukoutuClient.prototype);
 test('first cutout visits the service once and subsequent visits use the saved marker', async () => {
   const original = global.chrome, saved = {};
@@ -88,7 +88,7 @@ test('Doubao activation survives unsupported tab group updates', async () => {
   finally { global.chrome = original; }
 });
 test('Edge requests permissions in the click; Chrome keeps the existing permission check', async () => {
-  const source = fs.readFileSync(path.join(__dirname, '../sidepanel.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../quickdraw-sidepanel/sidepanel.js'), 'utf8');
   const method = source.slice(source.indexOf('    async ensureProviderPermission('), source.indexOf('    async ensureGPTPermission('));
   for (const [ua, expected] of [['Chrome/140 Edg/140', ['request']], ['Chrome/140', ['contains']]]) {
     const calls = [];

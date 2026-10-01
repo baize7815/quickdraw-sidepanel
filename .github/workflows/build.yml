@@ -17,18 +17,14 @@ jobs:
       - name: 读取版本号
         id: version
         run: |
-          VERSION=$(node -p "require('./manifest.json').version")
+          VERSION=$(node -p "require('./quickdraw-sidepanel/manifest.json').version")
           echo "version=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "filename=quickdraw-sidepanel-v$VERSION.zip" >> "$GITHUB_OUTPUT"
 
       - name: 打包扩展
         run: |
-          zip -r "${{ steps.version.outputs.filename }}" . \
-            -x ".git/*" \
-               ".github/*" \
-               "tests/*" \
-               "releases/*" \
-               "*.zip"
+          cd quickdraw-sidepanel
+          zip -r "../${{ steps.version.outputs.filename }}" .
 
       - name: 创建 GitHub Release
         env:
@@ -37,5 +33,5 @@ jobs:
           gh release create "${{ steps.version.outputs.version }}" \
             "${{ steps.version.outputs.filename }}" \
             --title "Quickdraw ${{ steps.version.outputs.version }}" \
-            --generate-notes \
+            --notes-file "releases/${{ steps.version.outputs.version }}.md" \
             --target "${{ github.sha }}"

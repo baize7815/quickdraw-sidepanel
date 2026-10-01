@@ -4,35 +4,45 @@
   const $=selector=>document.querySelector(selector);
   const svg=body=>`<svg viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
   const button=(name,title,body)=>`<button type="button" class="icon-btn" data-edit="${name}" title="${title}" aria-label="${title}">${svg(body)}</button>`;
+  const rawButton=(name,title,markup)=>`<button type="button" class="icon-btn" data-edit="${name}" title="${title}" aria-label="${title}">${markup}</button>`;
   const toBlob=canvas=>new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('图片编码失败。')),'image/png'));
   const MAX_CANVAS_SIDE=16384, MAX_CANVAS_AREA=18_000_000;
   const makeCanvas=(w,h)=>{
     if(!Number.isFinite(w*h)||w<1||h<1||w>MAX_CANVAS_SIDE||h>MAX_CANVAS_SIDE||w*h>MAX_CANVAS_AREA)throw new Error('处理范围超过 1800 万像素或单边 16384 像素，请先缩小图片。');
     const canvas=document.createElement('canvas');canvas.width=Math.ceil(w);canvas.height=Math.ceil(h);return canvas;
   };
-  const shapeTypes=new Set(['rect','ellipse','triangle','diamond','hexagon','star','cloud','draw','highlight','line','arrow','path']);
+  const shapeTypes=new Set(['rect','roundrect','ellipse','triangle','diamond','hexagon','star','cloud','draw','highlight','line','arrow','path']);
+  const booleanShapeTypes=new Set(['rect','roundrect','ellipse','triangle','diamond','hexagon','star','cloud','path']);
+  const BOOLEAN_MAX_PIXELS=4_000_000,BOOLEAN_MAX_DENSITY=3;
 
   globalThis.QDEditing={
     setupEditingUI(){
-      const alignIcons={
-        left:'M4 3v18M8 5h10v5H8zM8 14h7v5H8z',hcenter:'M12 2v20M5 5h14v5H5zM8 14h8v5H8z',right:'M20 3v18M6 5h10v5H6zM9 14h7v5H9z',
-        top:'M3 4h18M5 8h5v10H5zM14 8h5v7h-5z',vcenter:'M2 12h20M5 5h5v14H5zM14 8h5v8h-5z',bottom:'M3 20h18M5 6h5v10H5zM14 9h5v7h-5z'
-      };
-      for(const b of document.querySelectorAll('[data-align]')){b.innerHTML=svg(`<path d="${alignIcons[b.dataset.align]}"/>`);b.setAttribute('aria-label',b.title);}
-      for(const b of document.querySelectorAll('[data-distribute]')){
-        b.innerHTML=svg(`<g${b.dataset.distribute==='y'?' transform="rotate(90 12 12)"':''}><path d="M3 3v18M21 3v18M6 7h3v10H6zM15 7h3v10h-3zM11 12h2"/></g>`);b.title=b.dataset.distribute==='x'?'横向等间距':'纵向等间距';b.setAttribute('aria-label',b.title);b.classList.add('arrange-icon');
-      }
-      for(const [selector,title,icon] of [['#btn-layout-mind','自动整理分支','M3 10h5v5H3zM16 3h5v5h-5zM16 16h5v5h-5zM8 12h4M12 5v14M12 5h4M12 19h4'],['#btn-collapse-mind','折叠 / 展开分支','M4 4h16v16H4zM8 12h8M12 8v8']]){const b=$(selector);b.innerHTML=svg(`<path d="${icon}"/>`);b.title=title;b.setAttribute('aria-label',title);b.classList.add('arrange-icon');}
       const action=document.createElement('div');action.className='image-extra-actions';
-      action.innerHTML=button('grid','宫格切图（列 × 行）','<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>')+button('trace-menu','透明轮廓转 SVG 形状','<path d="M5 7c-3 5 0 12 5 12 7 0 11-5 8-11-3-6-10-6-13-1z"/><rect x="3" y="5" width="4" height="4"/><rect x="16" y="6" width="4" height="4"/><rect x="8" y="17" width="4" height="4"/>')+button('trim-alpha','裁剪透明像素','<path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path d="m8 8 2 2m6-2-2 2m-6 6 2-2m6 2-2-2"/>');
+      const traceIcon='<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M40 35C40 25.7953 32.8366 10 24 10C15.1634 10 8 25.7953 8 35" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="35" width="8" height="8" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="4" y="6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="36" y="35" width="8" height="8" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="36" y="6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M12 10H36" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      action.innerHTML=button('grid','宫格切图（列 × 行）','<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>')+rawButton('trace-menu','透明轮廓转 SVG 形状',traceIcon)+button('trim-alpha','裁剪透明像素','<path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path d="m8 8 2 2m6-2-2 2m-6 6 2-2m6 2-2-2"/>');
       action.insertAdjacentHTML('beforeend',button('stitch-grid','宫格拼图','<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/>'));
       $('.actionbar').append(action);
       const root=document.createElement('div');root.id='editing-ui';root.innerHTML=`
-        <div id="selection-toolbar" class="selection-toolbar" role="toolbar" aria-label="对象变换与遮罩" hidden>
+        <div id="selection-toolbar" class="selection-toolbar" role="toolbar" aria-label="所选对象操作" hidden>
+          <div class="arrange-actions">
+            ${button('align-left','左对齐','<path d="M4 3v18M8 5h10v5H8zM8 14h7v5H8z"/>')}
+            ${button('align-hcenter','水平居中','<path d="M12 2v20M5 5h14v5H5zM8 14h8v5H8z"/>')}
+            ${button('align-right','右对齐','<path d="M20 3v18M6 5h10v5H6zM9 14h7v5H9z"/>')}
+            ${button('align-top','顶对齐','<path d="M3 4h18M5 8h5v10H5zM14 8h5v7h-5z"/>')}
+            ${button('align-vcenter','垂直居中','<path d="M2 12h20M5 5h5v14H5zM14 8h5v8h-5z"/>')}
+            ${button('align-bottom','底对齐','<path d="M3 20h18M5 6h5v10H5zM14 9h5v7h-5z"/>')}
+            ${button('distribute-x','横向等间距','<path d="M3 3v18M21 3v18M6 7h3v10H6zM15 7h3v10h-3zM11 12h2"/>')}
+            ${button('distribute-y','纵向等间距','<g transform="rotate(90 12 12)"><path d="M3 3v18M21 3v18M6 7h3v10H6zM15 7h3v10h-3zM11 12h2"/></g>')}
+            ${rawButton('center-canvas','中心对齐','<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M16 6H8C6.89543 6 6 6.89543 6 8V16" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 42H8C6.89543 42 6 41.1046 6 40V32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 42H40C41.1046 42 42 41.1046 42 40V32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 6H40C41.1046 6 42 6.89543 42 8V16" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 24L16 24" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 32L24 16" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>')}
+            <span class="bar-divider"></span>
+            ${button('group','组合 Ctrl/⌘+G','<rect x="3" y="3" width="12" height="12" rx="2"/><rect x="9" y="9" width="12" height="12" rx="2"/>')}
+            ${button('ungroup','取消组合 Ctrl/⌘+Shift+G','<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/><path d="M10 14 14 10"/>')}
+            <span class="bar-divider"></span>
+          </div>
           <div class="mask-actions">
-            ${button('intersect','相交：保留图片与上层形状重合的部分','<rect x="3" y="3" width="12" height="12" rx="2"/><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M9 9h6v6H9z" fill="currentColor"/>')}
-            ${button('subtract','相减：从图片扣除上层形状覆盖的部分','<path d="M3 3h12v6H9v6H3z" fill="currentColor"/><path d="M9 9h12v12H9z"/>')}
-            ${button('split-mask','分割：生成图片内部与外部两部分','<path d="M2 3h11v5H7v7H2zM11 11h11v11H11z"/><path d="m8 8 8 8"/>')}
+            ${button('intersect','相交：保留两个对象重合的部分','<rect x="3" y="3" width="12" height="12" rx="2"/><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M9 9h6v6H9z" fill="currentColor"/>')}
+            ${button('subtract','相减：从下层对象扣除上层形状','<path d="M3 3h12v6H9v6H3z" fill="currentColor"/><path d="M9 9h12v12H9z"/>')}
+            ${button('split-mask','分割：用上层形状切分下层对象','<path d="M2 3h11v5H7v7H2zM11 11h11v11H11z"/><path d="m8 8 8 8"/>')}
             <span class="bar-divider"></span>
           </div>
           ${button('flip-x','水平镜像','<path d="M12 2v20M3 18l6-12v12zM21 18 15 6v12z"/>')}
@@ -69,11 +79,18 @@
       $('.image-extra-actions').hidden=!oneImage&&!imageGroup.length;
       for(const b of $('.image-extra-actions').querySelectorAll('[data-edit]'))b.hidden=b.dataset.edit==='stitch-grid'?!imageGroup.length:!oneImage;
       $('#selection-toolbar').hidden=!selected.length||!!this.cropTarget||!!this.watermarkTarget;
-      const canMask=selected.length===2&&selected.filter(el=>el.type==='image').length===1&&selected.some(el=>shapeTypes.has(el.type));
-      $('.mask-actions').hidden=!canMask;
+      const units=globalThis.QDGroups?.selectionUnits(selected.filter(el=>el.type!=='mindedge'),this.groups,this.elements)||[];
+      for(const button of document.querySelectorAll('[data-edit^="align-"],[data-edit="center-canvas"]'))button.disabled=busy||units.length<2;
+      for(const button of document.querySelectorAll('[data-edit^="distribute-"]'))button.disabled=busy||units.length<3;
+      const groupButton=document.querySelector('[data-edit="group"]'),ungroupButton=document.querySelector('[data-edit="ungroup"]');
+      if(groupButton)groupButton.disabled=busy||units.length<2;
+      if(ungroupButton)ungroupButton.disabled=busy||!selected.some(el=>globalThis.QDGroups?.rootGroupId(el.groupId,this.groups));
+      const canImageMask=selected.length===2&&selected.filter(el=>el.type==='image').length===1&&selected.some(el=>shapeTypes.has(el.type));
+      const canShapeBoolean=selected.length===2&&selected.every(el=>booleanShapeTypes.has(el.type));
+      $('.mask-actions').hidden=!(canImageMask||canShapeBoolean);
       const paths=selected.filter(el=>el.type==='path');$('#vector-style').hidden=!paths.length;
       for(const [selector,key] of [['#vector-fill','fillColor'],['#vector-stroke','strokeColor']]){const input=$(selector);if(paths.length&&document.activeElement!==input)input.value=paths.at(-1)[key]||paths.at(-1).color||'#1f1f1f';}
-      for(const b of document.querySelectorAll('[data-edit]'))b.disabled=busy;
+      for(const b of document.querySelectorAll('[data-edit]'))if(!b.matches('[data-edit^="align-"],[data-edit^="distribute-"],[data-edit="center-canvas"],[data-edit="group"],[data-edit="ungroup"]'))b.disabled=busy;
       for(const popover of document.querySelectorAll('.image-options')){if(popover.id==='grid-popover'){const targets=this.gridMode==='stitch'?imageGroup:(oneImage?selected:[]);if(!targets.length||JSON.stringify(targets)!==this.gridTargetState)popover.hidden=true;}else if(!oneImage)popover.hidden=true;for(const control of popover.querySelectorAll('button,input'))control.disabled=busy||(control.id==='grid-apply'&&!this.gridPreviewReady);}
     },
 
@@ -86,6 +103,11 @@
       if(action==='edit-nodes'){this.setTool('pen');this.render();return;}
       if(action==='flip-x'||action==='flip-y')return this.flipSelection(action==='flip-x'?'x':'y');
       if(action==='rotate')return this.rotateSelection(Math.PI/2);
+      if(action.startsWith('align-'))return this.alignSelected(action.slice(6));
+      if(action==='distribute-x'||action==='distribute-y')return this.distributeSelected(action.at(-1));
+      if(action==='center-canvas')return this.centerSelectedBoth();
+      if(action==='group')return this.groupSelected();
+      if(action==='ungroup')return this.ungroupSelected();
       if(['intersect','subtract','split-mask'].includes(action))return this.maskImage(action);
     },
     toggleEditingPopover(name){const popover=$(`#${name}`),open=popover.hidden;this.closePopovers();popover.hidden=!open;},
@@ -104,6 +126,11 @@
       this.spatialDirty=true;
     },
     rotateSelection(angle){const items=this.getSelectedElements(),b=this.getSelectionBBox();if(!b)return;const c={x:b.x+b.w/2,y:b.y+b.h/2},cos=Math.cos(angle),sin=Math.sin(angle);this.transformItems(items,V.around([cos,sin,-sin,cos,0,0],c));this.commit();this.render();},
+    resetSelectionRotation(){
+      const items=this.getSelectedElements().filter(el=>el.type!=='mindedge');if(!items.length)return;
+      for(const el of items){const m=V.matrix(el),b=this.getRawElementBBox(el);if(!b)continue;const sx=Math.hypot(m[0],m[1])||1,det=m[0]*m[3]-m[1]*m[2],sy=det/sx,local={x:b.x+b.w/2,y:b.y+b.h/2},world=V.point(m,local);el.transform=[sx,0,0,sy,world.x-sx*local.x,world.y-sy*local.y];}
+      this.spatialDirty=true;this.commit();this.render();
+    },
     flipSelection(axis){const b=this.getSelectionBBox();if(!b)return;this.transformItems(this.getSelectedElements(),V.around([axis==='x'?-1:1,0,0,axis==='y'?-1:1,0,0],{x:b.x+b.w/2,y:b.y+b.h/2}));this.commit();this.render();},
     rotationHandleAt(p){
       const frame=this.getSelectionFrame();if(!frame)return false;
@@ -133,16 +160,16 @@
     },
 
     drawVectorPath(ctx,el){
-      const path=new Path2D(V.pathData(el));ctx.fillStyle=el.fillColor||el.color||this.currentColor;ctx.strokeStyle=el.strokeColor||el.color||this.currentColor;
+      const path=new Path2D(V.pathData(el));ctx.fillStyle=el.fillColor||el.color||this.currentColor;ctx.strokeStyle=el.strokeColor||el.color||this.currentColor;ctx.lineCap=el.linecap||'round';ctx.lineJoin=el.linejoin||'round';if(Array.isArray(el.dashArray))ctx.setLineDash(el.dashArray);
       if(el.fill&&el.fill!=='none'){
-        ctx.save();if(el.fill==='semi')ctx.globalAlpha*=.2;
+        ctx.save();ctx.globalAlpha*=el.fillOpacity==null?1:Math.max(0,Math.min(1,Number(el.fillOpacity)||0));
         if(el.fill==='pattern'){ctx.clip(path,'evenodd');ctx.globalAlpha*=.35;ctx.lineWidth=1.2;const b=V.pathBounds(el);for(let x=b.x-b.h;x<b.x+b.w;x+=10){ctx.beginPath();ctx.moveTo(x,b.y+b.h);ctx.lineTo(x+b.h,b.y);ctx.stroke();}}
-        else ctx.fill(path,'evenodd');ctx.restore();
+        else ctx.fill(path,el.fillRule==='evenodd'?'evenodd':'nonzero');ctx.restore();
       }
-      if(el.stroke!=='none')ctx.stroke(path);
+      if(el.stroke!=='none'){ctx.save();ctx.globalAlpha*=el.strokeOpacity==null?1:Math.max(0,Math.min(1,Number(el.strokeOpacity)||0));ctx.stroke(path);ctx.restore();}
     },
-    pointInVectorPath(p,el){const ctx=this.ctx;ctx.save();ctx.setTransform(1,0,0,1,0,0);const path=new Path2D(V.pathData(el));ctx.lineWidth=Math.max(el.size||4,8/this.scale);const hit=(el.fill!=='none'&&ctx.isPointInPath(path,p.x,p.y,'evenodd'))||(el.stroke!=='none'&&ctx.isPointInStroke(path,p.x,p.y));ctx.restore();return hit;},
-    svgVectorPath(el){const esc=v=>this.xmlEscape(v),fill=el.fill==='none'?'none':el.fill==='pattern'?`url(#${this.patternId(el.color||this.currentColor)})`:el.fillColor||el.color||this.currentColor;return `<path d="${esc(V.pathData(el))}" fill="${esc(fill)}" fill-rule="evenodd" fill-opacity="${el.fill==='semi'?'.2':'1'}" stroke="${esc(el.stroke==='none'?'none':el.strokeColor||el.color||this.currentColor)}" stroke-width="${this.svgNum(el.size||4)}" stroke-linecap="round" stroke-linejoin="round"${this.svgDash(el)?` stroke-dasharray="${this.svgDash(el)}"`:''}/>`;},
+    pointInVectorPath(p,el){const ctx=this.ctx;ctx.save();ctx.setTransform(1,0,0,1,0,0);const path=new Path2D(V.pathData(el));ctx.lineWidth=Math.max(el.size||4,8/this.scale);const hit=(el.fill!=='none'&&ctx.isPointInPath(path,p.x,p.y,el.fillRule==='evenodd'?'evenodd':'nonzero'))||(el.stroke!=='none'&&ctx.isPointInStroke(path,p.x,p.y));ctx.restore();return hit;},
+    svgVectorPath(el){const esc=v=>this.xmlEscape(v),fill=el.fill==='none'?'none':el.fill==='pattern'?`url(#${this.patternId(el.color||this.currentColor)})`:el.fillColor||el.color||this.currentColor,fillOpacity=el.fillOpacity==null?1:Math.max(0,Math.min(1,Number(el.fillOpacity)||0)),strokeOpacity=el.strokeOpacity==null?1:Math.max(0,Math.min(1,Number(el.strokeOpacity)||0)),dash=Array.isArray(el.dashArray)&&el.dashArray.length?el.dashArray.map(v=>this.svgNum(v)).join(' '):this.svgDash(el);return `<path d="${esc(V.pathData(el))}" fill="${esc(fill)}" fill-rule="${el.fillRule==='evenodd'?'evenodd':'nonzero'}" fill-opacity="${this.svgNum(fillOpacity)}" stroke="${esc(el.stroke==='none'?'none':el.strokeColor||el.color||this.currentColor)}" stroke-opacity="${this.svgNum(strokeOpacity)}" stroke-width="${this.svgNum(el.size||2)}" stroke-linecap="${esc(el.linecap||'round')}" stroke-linejoin="${esc(el.linejoin||'round')}" vector-effect="non-scaling-stroke"${dash?` stroke-dasharray="${dash}"`:''}/>`;},
 
     async runEditingTask(targets,task){
       if(this.editingBusy||this.backgroundRemovalInProgress||this.watermarkRemovalInProgress)return this.toast('请等待当前图片处理完成。');
@@ -250,8 +277,48 @@
       });
     },
 
+    booleanRasterLayout(items){
+      const raw=this.getElementsBBox(items);if(!raw||raw.w<=0||raw.h<=0)throw new Error('形状范围无效。');
+      const pad=2,bounds={x:raw.x-pad,y:raw.y-pad,w:raw.w+pad*2,h:raw.h+pad*2};
+      const density=Math.min(BOOLEAN_MAX_DENSITY,MAX_CANVAS_SIDE/bounds.w,MAX_CANVAS_SIDE/bounds.h,Math.sqrt(BOOLEAN_MAX_PIXELS/(bounds.w*bounds.h)));
+      if(!Number.isFinite(density)||density<.25)throw new Error('形状范围过大，请先缩小后再做布尔运算。');
+      const width=Math.max(1,Math.ceil(bounds.w*density)),height=Math.max(1,Math.ceil(bounds.h*density));
+      return {bounds,width,height,scaleX:width/bounds.w,scaleY:height/bounds.h};
+    },
+    booleanGeometryImage(el,layout){
+      const canvas=makeCanvas(layout.width,layout.height),ctx=canvas.getContext('2d',{willReadFrequently:true});
+      ctx.save();ctx.scale(layout.scaleX,layout.scaleY);ctx.translate(-layout.bounds.x,-layout.bounds.y);ctx.transform(...V.matrix(el));ctx.fillStyle='#000';ctx.globalAlpha=1;ctx.setLineDash([]);
+      if(el.type==='path'){const path=new Path2D(V.pathData(el));ctx.fill(path,el.fillRule==='evenodd'?'evenodd':'nonzero');}
+      else{this.geometryPath(ctx,el);ctx.fill();}
+      ctx.restore();return ctx.getImageData(0,0,layout.width,layout.height);
+    },
+    combineBooleanImage(baseData,cutterData,mode){
+      const canvas=makeCanvas(baseData.width,baseData.height),ctx=canvas.getContext('2d'),out=ctx.createImageData(baseData.width,baseData.height),a=baseData.data,b=cutterData.data,d=out.data;
+      for(let i=0;i<d.length;i+=4){const base=a[i+3]>=128,cutter=b[i+3]>=128,keep=mode==='intersect'?(base&&cutter):(base&&!cutter);if(keep)d[i+3]=255;}
+      return out;
+    },
+    async booleanImageToPath(imageData,layout,style){
+      const contours=await this.traceInSandbox(imageData,128);if(!contours.length)return null;
+      const paths=contours.map(points=>({closed:true,nodes:points.map(([x,y])=>({x:layout.bounds.x+x/layout.scaleX,y:layout.bounds.y+y/layout.scaleY}))}));
+      return {id:id(),type:'path',paths,fillRule:'evenodd',color:style.color,fillColor:style.fillColor,strokeColor:style.strokeColor,fill:style.fill,fillOpacity:style.fillOpacity,stroke:'none',size:style.size,dash:'solid',opacity:style.opacity};
+    },
+    async booleanShapes(operation){
+      const selected=this.getSelectedElements();if(selected.length!==2||!selected.every(el=>booleanShapeTypes.has(el.type)))return;
+      const ordered=[...selected].sort((a,b)=>this.elements.indexOf(a)-this.elements.indexOf(b)),base=ordered[0],cutter=ordered[1];
+      this.toast('正在计算形状布尔运算…');
+      return this.runEditingTask(selected,async()=>{
+        const lower=clone(base),upper=clone(cutter),layout=this.booleanRasterLayout([lower,upper]),baseData=this.booleanGeometryImage(lower,layout),cutterData=this.booleanGeometryImage(upper,layout);
+        const baseColor=lower.fillColor||lower.color||this.currentColor,style={color:lower.color||baseColor,fillColor:baseColor,strokeColor:lower.strokeColor||lower.color||baseColor,fill:lower.fill==='pattern'?'pattern':'solid',fillOpacity:lower.fillOpacity==null?1:lower.fillOpacity,size:lower.size||this.currentSize,opacity:lower.opacity==null?1:lower.opacity};
+        const modes=operation==='split-mask'?['intersect','subtract']:[operation],items=[];
+        for(const mode of modes){const result=await this.booleanImageToPath(this.combineBooleanImage(baseData,cutterData,mode),layout,style);if(result)items.push(result);}
+        if(!items.length)throw new Error(operation==='intersect'?'两个形状没有重叠区域。':'布尔运算结果为空。');
+        return {items,remove:selected,message:operation==='split-mask'?`已分割为 ${items.length} 个矢量形状，可继续编辑节点。`:'形状布尔运算完成，结果保持为可编辑矢量路径。'};
+      });
+    },
+
     async maskImage(operation){
-      const selected=this.getSelectedElements(),target=selected.find(el=>el.type==='image'),mask=selected.find(el=>shapeTypes.has(el.type));if(selected.length!==2||!target||!mask)return;
+      const selected=this.getSelectedElements();if(selected.length===2&&selected.every(el=>booleanShapeTypes.has(el.type)))return this.booleanShapes(operation);
+      const target=selected.find(el=>el.type==='image'),mask=selected.find(el=>shapeTypes.has(el.type));if(selected.length!==2||!target||!mask)return;
       return this.runEditingTask(selected,async()=>{
         const image=clone(target),shape=clone(mask),record=await this.store.getAsset(image.assetId);if(!record?.blob)throw new Error('图片资源不存在。');const source=await this.loadCropDrawable(record.blob);
         try{
@@ -296,6 +363,7 @@
       return this.runEditingTask([target],async()=>{
         const snapshot=clone(target),record=await this.store.getAsset(snapshot.assetId);if(!record?.blob)throw new Error('图片资源不存在。');const source=await this.loadCropDrawable(record.blob);
         try{
+          if(source.width*source.height>12_000_000)throw new Error('图片超过 1200 万像素轮廓处理上限，请先缩小图片。');
           const canvas=makeCanvas(source.width,source.height),ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(source.drawable,0,0);const data=ctx.getImageData(0,0,canvas.width,canvas.height),contours=await this.traceInSandbox(data,threshold);
           if(!contours.length)throw new Error('图片在当前阈值下完全透明，请降低阈值。');
           const paths=contours.map(points=>({closed:true,nodes:points.map(([x,y])=>({x:snapshot.x+x/source.width*snapshot.w,y:snapshot.y+y/source.height*snapshot.h}))}));

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const updates = require('../update-checker.js');
+const updates = require('../quickdraw-sidepanel/update-checker.js');
 test('compares numeric versions and rejects malformed versions', () => {
   assert.equal(updates.newer('v3.10.0', '3.9.9'), true);
   assert.equal(updates.newer('3.7.5', '3.7.5.0'), false);
