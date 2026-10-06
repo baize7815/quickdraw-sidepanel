@@ -33,10 +33,26 @@
       return d;
     }).join(' ');
   };
+  const cubicValue = (p0,p1,p2,p3,t) => {
+    const u=1-t;
+    return u*u*u*p0+3*u*u*t*p1+3*u*t*t*p2+t*t*t*p3;
+  };
+  const cubicExtrema = (p0,p1,p2,p3) => {
+    const a=-p0+3*p1-3*p2+p3,b=2*(p0-2*p1+p2),c=p1-p0,eps=1e-12,out=[];
+    if(Math.abs(a)<eps){if(Math.abs(b)>=eps){const t=-c/b;if(t>0&&t<1)out.push(t);}return out;}
+    const d=b*b-4*a*c;if(d<0)return out;const s=Math.sqrt(Math.max(0,d));
+    for(const t of [(-b+s)/(2*a),(-b-s)/(2*a)])if(t>0&&t<1&&!out.some(v=>Math.abs(v-t)<1e-9))out.push(t);
+    return out;
+  };
   const pathBounds = el => {
     const pts=[];
-    // The control hull contains the entire Bézier curve, including extreme bends.
-    for(const path of el.paths||[])for(const n of path.nodes||[]){pts.push(n);if(n.in)pts.push(n.in);if(n.out)pts.push(n.out);}
+    const addSegment=(a,b)=>{
+      pts.push({x:a.x,y:a.y},{x:b.x,y:b.y});
+      if(!a.out&&!b.in)return;
+      const c1=a.out||a,c2=b.in||b,times=new Set([0,1,...cubicExtrema(a.x,c1.x,c2.x,b.x),...cubicExtrema(a.y,c1.y,c2.y,b.y)]);
+      for(const t of times)pts.push({x:cubicValue(a.x,c1.x,c2.x,b.x,t),y:cubicValue(a.y,c1.y,c2.y,b.y,t)});
+    };
+    for(const path of el.paths||[]){const nodes=path.nodes||[];if(nodes.length===1)pts.push(nodes[0]);for(let i=1;i<nodes.length;i++)addSegment(nodes[i-1],nodes[i]);if(path.closed&&nodes.length>1)addSegment(nodes.at(-1),nodes[0]);}
     const b=bounds(pts);if(!b)return null;const pad=el.stroke==='none'?0:(el.size||4)/2;
     return {x:b.x-pad,y:b.y-pad,w:b.w+2*pad,h:b.h+2*pad};
   };

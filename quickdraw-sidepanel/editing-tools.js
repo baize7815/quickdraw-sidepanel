@@ -47,8 +47,8 @@
           </div>
           ${button('flip-x','水平镜像','<path d="M12 2v20M3 18l6-12v12zM21 18 15 6v12z"/>')}
           ${button('flip-y','垂直镜像','<path d="M2 12h20M6 3l12 6H6zM6 21l12-6H6z"/>')}
-          ${button('rotate','顺时针旋转 90° · 也可拖拽选框四角外侧','<path d="M19 9A8 8 0 1 0 20 15M19 3v6h-6"/>')}
-          <div id="vector-style" hidden><label title="矢量填充颜色">填充<input id="vector-fill" type="color" value="#1f1f1f" aria-label="矢量填充颜色"></label><label title="矢量描边颜色">描边<input id="vector-stroke" type="color" value="#1f1f1f" aria-label="矢量描边颜色"></label>${button('edit-nodes','编辑钢笔锚点','<path d="M4 18C4 3 20 21 20 6"/><rect x="2" y="16" width="4" height="4"/><rect x="18" y="4" width="4" height="4"/>')}</div>
+          ${button('rotate','顺时针旋转 90° · 也可拖拽选框顶部旋转点','<path d="M19 9A8 8 0 1 0 20 15M19 3v6h-6"/>')}
+          <div id="vector-style" hidden><label title="矢量填充颜色">填充<input id="vector-fill" type="color" value="#1D1D1D" aria-label="矢量填充颜色"></label><label title="矢量描边颜色">描边<input id="vector-stroke" type="color" value="#1D1D1D" aria-label="矢量描边颜色"></label>${button('edit-nodes','编辑钢笔锚点','<path d="M4 18C4 3 20 21 20 6"/><rect x="2" y="16" width="4" height="4"/><rect x="18" y="4" width="4" height="4"/>')}</div>
         </div>
         <div id="crop-popover" class="popover image-options" hidden aria-label="图片裁剪设置"><strong>裁剪比例</strong><div class="preset-grid">${['自由','1:1','9:16','16:9','3:4','4:3'].map(r=>`<button data-crop-ratio="${r}">${r}</button>`).join('')}</div><form id="crop-custom"><label>宽<input name="width" type="number" min="0.01" step="any" value="1" required aria-label="自定义裁剪宽"></label><span>×</span><label>高<input name="height" type="number" min="0.01" step="any" value="1" required aria-label="自定义裁剪高"></label><button type="submit">开始</button></form><p>拖框后可调整 · 框内双击确认 · Esc 取消</p></div>
         <div id="grid-popover" class="popover image-options grid-editor" hidden role="dialog" aria-label="宫格图片编辑">
@@ -132,12 +132,9 @@
       this.spatialDirty=true;this.commit();this.render();
     },
     flipSelection(axis){const b=this.getSelectionBBox();if(!b)return;this.transformItems(this.getSelectedElements(),V.around([axis==='x'?-1:1,0,0,axis==='y'?-1:1,0,0],{x:b.x+b.w/2,y:b.y+b.h/2}));this.commit();this.render();},
-    rotationHandleAt(p){
-      const frame=this.getSelectionFrame();if(!frame)return false;
-      const b=frame.box,q=V.point(V.inverse(frame.matrix),p);
-      if(q.x>=b.x&&q.x<=b.x+b.w&&q.y>=b.y&&q.y<=b.y+b.h)return false;
-      return V.corners(b).map(c=>V.point(frame.matrix,c)).some(c=>{const dx=Math.abs(p.x-c.x)*this.scale,dy=Math.abs(p.y-c.y)*this.scale;return Math.max(dx,dy)>9&&Math.hypot(dx,dy)<25;});
-    },
+    rotationHandlePoint(frame=this.getSelectionFrame()){if(!frame?.box)return null;const b=frame.box,gap=28/this.scale;return V.point(frame.matrix,{x:b.x+b.w/2,y:b.y-gap});},
+    rotationHandleAt(p){const q=this.rotationHandlePoint();return !!q&&Math.hypot((p.x-q.x)*this.scale,(p.y-q.y)*this.scale)<=11;},
+    drawRotationHandle(ctx,frame){const b=frame.box,top=V.point(frame.matrix,{x:b.x+b.w/2,y:b.y}),h=this.rotationHandlePoint(frame);ctx.save();ctx.strokeStyle='#2f6fed';ctx.fillStyle='#fff';ctx.lineWidth=1.2/this.scale;ctx.beginPath();ctx.moveTo(top.x,top.y);ctx.lineTo(h.x,h.y);ctx.stroke();ctx.beginPath();ctx.arc(h.x,h.y,5/this.scale,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.restore();},
 
     getSelectionFrame(items=this.getSelectedElements()){
       if(!items.length)return null;
@@ -169,7 +166,7 @@
       if(el.stroke!=='none'){ctx.save();ctx.globalAlpha*=el.strokeOpacity==null?1:Math.max(0,Math.min(1,Number(el.strokeOpacity)||0));ctx.stroke(path);ctx.restore();}
     },
     pointInVectorPath(p,el){const ctx=this.ctx;ctx.save();ctx.setTransform(1,0,0,1,0,0);const path=new Path2D(V.pathData(el));ctx.lineWidth=Math.max(el.size||4,8/this.scale);const hit=(el.fill!=='none'&&ctx.isPointInPath(path,p.x,p.y,el.fillRule==='evenodd'?'evenodd':'nonzero'))||(el.stroke!=='none'&&ctx.isPointInStroke(path,p.x,p.y));ctx.restore();return hit;},
-    svgVectorPath(el){const esc=v=>this.xmlEscape(v),fill=el.fill==='none'?'none':el.fill==='pattern'?`url(#${this.patternId(el.color||this.currentColor)})`:el.fillColor||el.color||this.currentColor,fillOpacity=el.fillOpacity==null?1:Math.max(0,Math.min(1,Number(el.fillOpacity)||0)),strokeOpacity=el.strokeOpacity==null?1:Math.max(0,Math.min(1,Number(el.strokeOpacity)||0)),dash=Array.isArray(el.dashArray)&&el.dashArray.length?el.dashArray.map(v=>this.svgNum(v)).join(' '):this.svgDash(el);return `<path d="${esc(V.pathData(el))}" fill="${esc(fill)}" fill-rule="${el.fillRule==='evenodd'?'evenodd':'nonzero'}" fill-opacity="${this.svgNum(fillOpacity)}" stroke="${esc(el.stroke==='none'?'none':el.strokeColor||el.color||this.currentColor)}" stroke-opacity="${this.svgNum(strokeOpacity)}" stroke-width="${this.svgNum(el.size||2)}" stroke-linecap="${esc(el.linecap||'round')}" stroke-linejoin="${esc(el.linejoin||'round')}" vector-effect="non-scaling-stroke"${dash?` stroke-dasharray="${dash}"`:''}/>`;},
+    svgVectorPath(el){const esc=v=>this.xmlEscape(v),fill=el.fill==='none'?'none':el.fill==='pattern'?`url(#${this.patternId(el.fillColor||el.color||this.currentColor)})`:el.fillColor||el.color||this.currentColor,fillOpacity=el.fillOpacity==null?1:Math.max(0,Math.min(1,Number(el.fillOpacity)||0)),strokeOpacity=el.strokeOpacity==null?1:Math.max(0,Math.min(1,Number(el.strokeOpacity)||0)),dash=Array.isArray(el.dashArray)&&el.dashArray.length?el.dashArray.map(v=>this.svgNum(v)).join(' '):this.svgDash(el);return `<path d="${esc(V.pathData(el))}" fill="${esc(fill)}" fill-rule="${el.fillRule==='evenodd'?'evenodd':'nonzero'}" fill-opacity="${this.svgNum(fillOpacity)}" stroke="${esc(el.stroke==='none'?'none':el.strokeColor||el.color||this.currentColor)}" stroke-opacity="${this.svgNum(strokeOpacity)}" stroke-width="${this.svgNum(el.size||2)}" stroke-linecap="${esc(el.linecap||'round')}" stroke-linejoin="${esc(el.linejoin||'round')}" vector-effect="non-scaling-stroke"${dash?` stroke-dasharray="${dash}"`:''}/>`;},
 
     async runEditingTask(targets,task){
       if(this.editingBusy||this.backgroundRemovalInProgress||this.watermarkRemovalInProgress)return this.toast('请等待当前图片处理完成。');
@@ -404,8 +401,8 @@
       this.container.focus({preventScroll:true});this.captureInteractionPointer(e.pointerId);
       const hit=this.penHandleAt(p);
       if(this.penDraft&&hit?.ni===0&&hit.pi===0&&hit.kind==='anchor'&&this.penDraft.paths[0].nodes.length>2){this.finishPen(true);this.releaseInteractionPointer(e.pointerId);return true;}
-      if(hit&&!this.penDraft){this.penDrag={...hit,before:clone(hit.el),node:clone(hit.el.paths[hit.pi].nodes[hit.ni]),start:this.imageLocalPoint(hit.el,p)};this.penEdit=hit;return true;}
-      if(!this.penDraft){this.clearSelection();this.penDraft={id:id(),type:'path',paths:[{closed:false,nodes:[]}],color:this.currentColor,fill:this.currentFill,stroke:'solid',size:this.currentSize,dash:this.currentDash};}
+      if(hit&&!this.penDraft){const start=this.imageLocalPoint(hit.el,p),kind=hit.kind==='anchor'&&e.altKey?'anchor-handle':hit.kind;this.penDrag={...hit,kind,before:clone(hit.el),node:clone(hit.el.paths[hit.pi].nodes[hit.ni]),start};this.penEdit=hit;return true;}
+      if(!this.penDraft){this.clearSelection();this.penDraft={id:id(),type:'path',paths:[{closed:false,nodes:[]}],color:this.currentColor,fillColor:this.currentFillColor||this.currentColor,strokeColor:this.currentStrokeColor||this.currentColor,fill:this.currentFill,stroke:'solid',size:this.currentSize,dash:this.currentDash};}
       const q=this.snapWorldPoint(p),nodes=this.penDraft.paths[0].nodes;nodes.push({x:q.x,y:q.y});this.penDrag={el:this.penDraft,pi:0,ni:nodes.length-1,kind:'new',start:q};this.render();return true;
     },
     editingPointerMove(e){
@@ -413,6 +410,7 @@
       if(this.rotationDrag){const d=this.rotationDrag;let angle=Math.atan2(p.y-d.center.y,p.x-d.center.x)-d.angle;if(e.shiftKey)angle=Math.round(angle/(Math.PI/12))*Math.PI/12;const m=V.around([Math.cos(angle),Math.sin(angle),-Math.sin(angle),Math.cos(angle),0,0],d.center);const items=d.elements.map(src=>{const el=this.elements.find(el=>el.id===src.id);if(el){delete el.transform;Object.assign(el,clone(src));}return el;}).filter(Boolean);this.transformItems(items,m);this.render();return true;}
       if(this.penDrag){const d=this.penDrag,node=d.el.paths[d.pi].nodes[d.ni],q=this.imageLocalPoint(d.el,p);
         if(d.kind==='anchor'){const dx=q.x-d.start.x,dy=q.y-d.start.y;node.x=d.node.x+dx;node.y=d.node.y+dy;for(const kind of ['in','out'])if(d.node[kind])node[kind]={x:d.node[kind].x+dx,y:d.node[kind].y+dy};}
+        else if(d.kind==='anchor-handle'){if(Math.hypot(q.x-node.x,q.y-node.y)>3/this.scale){node.out={x:q.x,y:q.y};node.in={x:2*node.x-q.x,y:2*node.y-q.y};}}
         else{const kind=d.kind==='new'?'out':d.kind;if(d.kind!=='new'||Math.hypot(q.x-node.x,q.y-node.y)>3/this.scale){node[kind]={x:q.x,y:q.y};if(!e.altKey)node[kind==='in'?'out':'in']={x:2*node.x-q.x,y:2*node.y-q.y};}}
         this.spatialDirty=true;this.render();return true;
       }
@@ -425,9 +423,16 @@
       return this.currentTool==='pen'&&!this.isPanning;
     },
     editingKeyDown(e){
-      const key=e.key.toLowerCase();
+      const key=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;
       if(this.rotationDrag&&key==='escape'){this.editingPointerUp({type:'pointercancel'});return true;}
       if(this.currentTool!=='pen')return false;
+      if(mod&&key==='z'&&!e.shiftKey&&this.penDraft){
+        e.preventDefault();
+        const nodes=this.penDraft.paths?.[0]?.nodes;
+        if(this.penDrag?.el===this.penDraft){this.penDrag=null;this.releaseInteractionPointer();this.pointerDown=false;}
+        if(nodes?.length){nodes.pop();this.penEdit=null;this.spatialDirty=true;this.render();}
+        return true;
+      }
       if(key==='escape'){if(this.penDrag?.before)Object.assign(this.penDrag.el,this.penDrag.before);this.penDraft=null;this.penDrag=null;this.penEdit=null;this.releaseInteractionPointer();this.spatialDirty=true;this.setTool('select');return true;}
       if(key==='enter'){e.preventDefault();this.finishPen();this.setTool('select');return true;}
       if(key==='delete'||key==='backspace'){
@@ -438,7 +443,7 @@
     drawEditingOverlay(ctx){
       if(this.penDraft)this.drawElement(ctx,this.penDraft);
       if(this.currentTool==='select'&&this.getSelectedElements().length&&!this.cropTarget&&!this.watermarkTarget){
-        const frame=this.getSelectionFrame();if(frame){const b=frame.box,center=V.point(frame.matrix,{x:b.x+b.w/2,y:b.y+b.h/2});ctx.save();ctx.strokeStyle='#2f6fed';ctx.lineWidth=1.2/this.scale;ctx.globalAlpha=.7;const r=14/this.scale;for(const c of V.corners(b).map(p=>V.point(frame.matrix,p))){const angle=Math.atan2(c.y-center.y,c.x-center.x);ctx.beginPath();ctx.arc(c.x,c.y,r,angle-.5,angle+.5);ctx.stroke();}ctx.restore();}
+        const frame=this.getSelectionFrame();if(frame)this.drawRotationHandle(ctx,frame);
       }
       if(this.currentTool!=='pen')return;const el=this.penTarget();if(!el)return;const m=V.matrix(el),r=3.5/this.scale;ctx.save();ctx.strokeStyle='#2f6fed';ctx.fillStyle='#fff';ctx.lineWidth=1/this.scale;ctx.setLineDash([]);
       for(const path of el.paths)for(const node of path.nodes){const p=V.point(m,node);for(const kind of ['in','out'])if(node[kind]){const q=V.point(m,node[kind]);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();ctx.beginPath();ctx.arc(q.x,q.y,r,0,2*Math.PI);ctx.fill();ctx.stroke();}ctx.beginPath();ctx.rect(p.x-r,p.y-r,2*r,2*r);ctx.fill();ctx.stroke();}ctx.restore();

@@ -16,6 +16,7 @@
     }else if(element.fillOpacity!=null){
       element.fillOpacity=Math.max(0,Math.min(1,Number(element.fillOpacity)||0));
     }
+    if(element.strokeOpacity!=null)element.strokeOpacity=opacity(element.strokeOpacity);
     for(const key of ['x','y','w','h','size','fontSize','bend'])if(element[key]!=null)element[key]=bounded(element[key]);
     if(Array.isArray(element.transform)){if(element.transform.length!==6)throw new Error(`对象 ${element.id} 的变换矩阵无效。`);element.transform=element.transform.map(bounded);const[a,b,c,d]=element.transform;if(Math.abs(a*d-b*c)<1e-10)throw new Error(`对象 ${element.id} 的变换矩阵不可逆。`);}
     if(Array.isArray(element.points)){if(element.points.length>50000)throw new Error(`对象 ${element.id} 的点数过多。`);element.points=element.points.map(point=>({...point,x:bounded(point.x),y:bounded(point.y)}));}

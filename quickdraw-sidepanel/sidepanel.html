@@ -86,6 +86,19 @@
       <div id="opacity-hint" class="opacity-hint"></div>
     </div>
 
+    <div id="text-size-control" class="text-size-control" hidden aria-label="文字格式">
+      <span class="text-size-options" aria-label="文字大小"><button type="button" data-text-size="16">S</button><button type="button" data-text-size="28" class="active">M</button><button type="button" data-text-size="44">L</button><button type="button" data-text-size="64">XL</button></span>
+      <span id="note-text-controls" class="note-text-controls" hidden aria-label="便签文字对齐">
+        <span class="text-control-divider"></span>
+        <button type="button" data-note-align="left" title="左对齐" aria-label="左对齐"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h11M4 14h16M4 18h9"/></svg></button>
+        <button type="button" data-note-align="center" title="居中对齐" aria-label="居中对齐"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 10h10M4 14h16M8 18h8"/></svg></button>
+        <button type="button" data-note-align="right" title="右对齐" aria-label="右对齐"><svg viewBox="0 0 24 24"><path d="M4 6h16M9 10h11M4 14h16M11 18h9"/></svg></button>
+        <span class="text-control-divider"></span>
+        <button type="button" data-note-valign="top" title="顶部对齐" aria-label="顶部对齐"><svg viewBox="0 0 24 24"><path d="M5 5h14M7 9h10M7 12h10"/></svg></button>
+        <button type="button" data-note-valign="middle" title="垂直居中" aria-label="垂直居中"><svg viewBox="0 0 24 24"><path d="M5 12h14M7 8h10M7 16h10"/></svg></button>
+        <button type="button" data-note-valign="bottom" title="底部对齐" aria-label="底部对齐"><svg viewBox="0 0 24 24"><path d="M7 12h10M7 15h10M5 19h14"/></svg></button>
+      </span>
+    </div>
     <nav class="dock" id="main-toolbar" aria-label="绘图工具">
       <div class="dock-scroll">
         <button class="tool-btn active" data-tool="select" title="选择 V / 1">
@@ -115,7 +128,7 @@
         </button>
         <button class="tool-btn" data-tool="text" title="文本 T"><svg viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></button>
         <button class="tool-btn" data-tool="note" title="便签 N"><svg viewBox="0 0 24 24"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></svg></button>
-        <button class="tool-btn" data-tool="mindmap" title="思维导图 M · Tab 子节点 · Shift+Tab 同级"><svg viewBox="0 0 24 24"><rect x="3" y="9" width="6" height="6" rx="1.5"/><rect x="15" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/><path d="M9 12h3a3 3 0 0 0 3-3V6M12 12h1a2 2 0 0 1 2 2v4"/></svg></button>
+        <button class="tool-btn" data-tool="mindmap" title="连接所选对象 M · 自动生成思维导图式关系线"><svg viewBox="0 0 24 24"><rect x="3" y="9" width="6" height="6" rx="1.5"/><rect x="15" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/><path d="M9 12h3a3 3 0 0 0 3-3V6M12 12h1a2 2 0 0 1 2 2v4"/></svg></button>
         <button class="tool-btn code-tool-btn" id="btn-mermaid" title="Mermaid 流程图代码" aria-label="Mermaid 流程图代码">&lt;/&gt;</button>
         <button class="tool-btn" id="btn-upload-img" title="插入图片（支持多选，也可多图拖入）"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg></button>
         <button class="tool-btn" id="btn-menu" title="画板菜单"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg></button>
@@ -136,19 +149,18 @@
     <div id="style-popover" class="style-popover persistent-style-panel" aria-label="右侧样式工具栏">
       <div class="style-card color-card">
         <div class="color-grid" id="color-grid">
-          <button class="color-dot active" data-color="#1F1F1F" style="--dot:#1F1F1F" title="黑"></button>
-          <button class="color-dot" data-color="#A8B2BF" style="--dot:#A8B2BF" title="灰"></button>
-          <button class="color-dot" data-color="#D562E5" style="--dot:#D562E5" title="洋红"></button>
-          <button class="color-dot" data-color="#A934CF" style="--dot:#A934CF" title="紫"></button>
-          <button class="color-dot" data-color="#4263EB" style="--dot:#4263EB" title="蓝"></button>
-          <button class="color-dot" data-color="#3FA0F3" style="--dot:#3FA0F3" title="天蓝"></button>
-          <button class="color-dot" data-color="#F4AA3C" style="--dot:#F4AA3C" title="黄橙"></button>
-          <button class="color-dot" data-color="#E86A12" style="--dot:#E86A12" title="橙"></button>
-          <button class="color-dot" data-color="#45B464" style="--dot:#45B464" title="绿"></button>
-          <button class="color-dot" data-color="#FA7076" style="--dot:#FA7076" title="珊瑚"></button>
-          <button class="color-dot" data-color="#EF3338" style="--dot:#EF3338" title="红"></button>
-          <input id="custom-color" type="color" value="#1F1F1F" title="自定义颜色" />
-        </div>
+          <button class="color-dot active" data-color="#1D1D1D" style="--dot:#1D1D1D" title="#1D1D1D"></button>
+          <button class="color-dot" data-color="#4A4B7B" style="--dot:#4A4B7B" title="#4A4B7B"></button>
+          <button class="color-dot" data-color="#8E86C2" style="--dot:#8E86C2" title="#8E86C2"></button>
+          <button class="color-dot" data-color="#881A1F" style="--dot:#881A1F" title="#881A1F"></button>
+          <button class="color-dot" data-color="#DB5476" style="--dot:#DB5476" title="#DB5476"></button>
+          <button class="color-dot" data-color="#DD793E" style="--dot:#DD793E" title="#DD793E"></button>
+          <button class="color-dot" data-color="#C4A37E" style="--dot:#C4A37E" title="#C4A37E"></button>
+          <button class="color-dot" data-color="#98AA72" style="--dot:#98AA72" title="#98AA72"></button>
+          <button class="color-dot" data-color="#F9DF9D" style="--dot:#F9DF9D" title="#F9DF9D"></button>
+          <button class="color-dot" data-color="#EDF1F4" style="--dot:#EDF1F4" title="#EDF1F4"></button>
+          <button class="color-dot" data-color="#FAFAFA" style="--dot:#FAFAFA" title="#FAFAFA"></button>
+          <input id="custom-color" type="color" value="#1D1D1D" title="自定义颜色" />        </div>
       </div>
       <div class="style-card line-card">
         <div class="style-row size-row">
@@ -183,19 +195,17 @@
     <div id="mind-text-color-menu" class="popover mind-text-color-menu" hidden aria-label="思维导图文字颜色">
       <div class="mind-color-title">文字颜色</div>
       <div class="mind-text-color-grid">
-        <button class="mind-text-color-dot" data-color="#1F1F1F" style="--dot:#1F1F1F" title="黑"></button>
-        <button class="mind-text-color-dot" data-color="#A8B2BF" style="--dot:#A8B2BF" title="灰"></button>
-        <button class="mind-text-color-dot" data-color="#D562E5" style="--dot:#D562E5" title="洋红"></button>
-        <button class="mind-text-color-dot" data-color="#A934CF" style="--dot:#A934CF" title="紫"></button>
-        <button class="mind-text-color-dot" data-color="#4263EB" style="--dot:#4263EB" title="蓝"></button>
-        <button class="mind-text-color-dot" data-color="#3FA0F3" style="--dot:#3FA0F3" title="天蓝"></button>
-        <button class="mind-text-color-dot" data-color="#F4AA3C" style="--dot:#F4AA3C" title="黄橙"></button>
-        <button class="mind-text-color-dot" data-color="#E86A12" style="--dot:#E86A12" title="橙"></button>
-        <button class="mind-text-color-dot" data-color="#0C9872" style="--dot:#0C9872" title="青绿"></button>
-        <button class="mind-text-color-dot" data-color="#45B464" style="--dot:#45B464" title="绿"></button>
-        <button class="mind-text-color-dot" data-color="#FA7076" style="--dot:#FA7076" title="珊瑚"></button>
-        <button class="mind-text-color-dot" data-color="#EF3338" style="--dot:#EF3338" title="红"></button>
-      </div>
+        <button class="mind-text-color-dot" data-color="#1D1D1D" style="--dot:#1D1D1D" title="#1D1D1D"></button>
+        <button class="mind-text-color-dot" data-color="#4A4B7B" style="--dot:#4A4B7B" title="#4A4B7B"></button>
+        <button class="mind-text-color-dot" data-color="#8E86C2" style="--dot:#8E86C2" title="#8E86C2"></button>
+        <button class="mind-text-color-dot" data-color="#881A1F" style="--dot:#881A1F" title="#881A1F"></button>
+        <button class="mind-text-color-dot" data-color="#DB5476" style="--dot:#DB5476" title="#DB5476"></button>
+        <button class="mind-text-color-dot" data-color="#DD793E" style="--dot:#DD793E" title="#DD793E"></button>
+        <button class="mind-text-color-dot" data-color="#C4A37E" style="--dot:#C4A37E" title="#C4A37E"></button>
+        <button class="mind-text-color-dot" data-color="#98AA72" style="--dot:#98AA72" title="#98AA72"></button>
+        <button class="mind-text-color-dot" data-color="#F9DF9D" style="--dot:#F9DF9D" title="#F9DF9D"></button>
+        <button class="mind-text-color-dot" data-color="#EDF1F4" style="--dot:#EDF1F4" title="#EDF1F4"></button>
+        <button class="mind-text-color-dot" data-color="#FAFAFA" style="--dot:#FAFAFA" title="#FAFAFA"></button>      </div>
     </div>
 
     <div id="menu-popover" class="popover menu-popover" hidden>
@@ -213,7 +223,7 @@
       <button class="menu-item" id="btn-help"><span>查看帮助</span><span class="menu-value">快捷键与说明</span></button>
       <button class="menu-item" id="btn-check-update"><span>检查更新</span><span class="menu-value" id="update-status">手动检查</span></button>
       <div class="menu-divider"></div>
-      <button class="menu-item" id="btn-fit"><span>缩放至内容</span><kbd>F</kbd></button>
+      <button class="menu-item" id="btn-fit"><span>缩放到所选内容</span><kbd>F</kbd></button>
       <button class="menu-item" id="btn-clear"><span>清空画板</span></button>
       <div class="menu-divider"></div>
       <div class="menu-control"><span>网格</span><div class="seg" id="grid-control">
@@ -231,6 +241,8 @@
       <div class="menu-control"><span>网格吸附</span><div class="seg" id="snap-control"><button data-enabled="false">关</button><button data-enabled="true" class="active">开</button></div></div>
       <button class="menu-item" id="btn-project-github" title="https://github.com/baize7815/quickdraw-sidepanel"><span>GitHub 项目</span><span class="menu-value">baize7815/quickdraw-sidepanel ↗</span></button>
     </div>
+
+    <button id="btn-wheel-zoom-lock" class="wheel-zoom-lock" type="button" title="锁定鼠标滚轮缩放" aria-label="锁定鼠标滚轮缩放" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></button>
 
     <footer class="zoom-bar">
       <button id="btn-zoom-out" title="缩小">−</button>
