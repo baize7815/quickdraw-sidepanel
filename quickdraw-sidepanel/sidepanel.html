@@ -149,19 +149,22 @@
     <div id="style-popover" class="style-popover persistent-style-panel" aria-label="右侧样式工具栏">
       <div class="style-card color-card">
         <div class="color-grid" id="color-grid">
-          <button class="color-dot active" data-color="#1D1D1D" style="--dot:#1D1D1D" title="#1D1D1D"></button>
-          <button class="color-dot" data-color="#4A4B7B" style="--dot:#4A4B7B" title="#4A4B7B"></button>
-          <button class="color-dot" data-color="#8E86C2" style="--dot:#8E86C2" title="#8E86C2"></button>
-          <button class="color-dot" data-color="#881A1F" style="--dot:#881A1F" title="#881A1F"></button>
-          <button class="color-dot" data-color="#DB5476" style="--dot:#DB5476" title="#DB5476"></button>
-          <button class="color-dot" data-color="#DD793E" style="--dot:#DD793E" title="#DD793E"></button>
-          <button class="color-dot" data-color="#C4A37E" style="--dot:#C4A37E" title="#C4A37E"></button>
-          <button class="color-dot" data-color="#98AA72" style="--dot:#98AA72" title="#98AA72"></button>
-          <button class="color-dot" data-color="#F9DF9D" style="--dot:#F9DF9D" title="#F9DF9D"></button>
-          <button class="color-dot" data-color="#EDF1F4" style="--dot:#EDF1F4" title="#EDF1F4"></button>
-          <button class="color-dot" data-color="#FAFAFA" style="--dot:#FAFAFA" title="#FAFAFA"></button>
-          <input id="custom-color" type="color" value="#1D1D1D" title="自定义颜色" />        </div>
-      </div>
+          <button id="btn-next-palette" class="palette-next" type="button" title="下一组色卡：浅霏" aria-label="下一组色卡：浅霏">
+            <svg width="16" height="16" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M14 12L26 24L14 36" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M34 12V36" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="color-dot" data-color="#A785FE" style="--dot:#A785FE" title="#A785FE"></button>
+          <button class="color-dot" data-color="#FF7BB5" style="--dot:#FF7BB5" title="#FF7BB5"></button>
+          <button class="color-dot" data-color="#F73A2C" style="--dot:#F73A2C" title="#F73A2C"></button>
+          <button class="color-dot" data-color="#FF7131" style="--dot:#FF7131" title="#FF7131"></button>
+          <button class="color-dot" data-color="#FEE717" style="--dot:#FEE717" title="#FEE717"></button>
+          <button class="color-dot" data-color="#557EF2" style="--dot:#557EF2" title="#557EF2"></button>
+          <button class="color-dot" data-color="#45B4FC" style="--dot:#45B4FC" title="#45B4FC"></button>
+          <button class="color-dot" data-color="#03BF61" style="--dot:#03BF61" title="#03BF61"></button>
+          <button class="color-dot" data-color="#DDF977" style="--dot:#DDF977" title="#DDF977"></button>
+          <button class="color-dot active" data-color="#2B2B2B" style="--dot:#2B2B2B" title="#2B2B2B"></button>
+          <button class="color-dot" data-color="#F2F2F2" style="--dot:#F2F2F2" title="#F2F2F2"></button>
+          <input id="custom-color" type="color" value="#2B2B2B" title="自定义颜色" />
+        </div>      </div>
       <div class="style-card line-card">
         <div class="style-row size-row">
           <input id="size-slider" type="range" min="1" max="20" step="1" value="3" title="线条粗细（1–20）" aria-label="线条粗细">
@@ -169,8 +172,8 @@
         </div>
         <div class="style-row">
           <button class="style-option dash-option active" data-dash="solid" title="实线"><svg viewBox="0 0 24 24"><path d="M4 12h16"/></svg></button>
-          <button class="style-option dash-option" data-dash="dashed" title="虚线"><svg viewBox="0 0 24 24"><path d="M4 12h4M11 12h4M18 12h2"/></svg></button>
-          <button class="style-option dash-option" data-dash="dotted" title="点线"><svg viewBox="0 0 24 24"><path d="M4.5 12h.01M9.5 12h.01M14.5 12h.01M19.5 12h.01"/></svg></button>
+          <button class="style-option dash-option" data-dash="dashed" title="虚线"><svg viewBox="0 0 24 24"><path d="M4 12h3M11 12h3M18 12h2"/></svg></button>
+          <button class="style-option dash-option" data-dash="dotted" title="点线"><svg viewBox="0 0 24 24"><path d="M4.5 12h.01M10 12h.01M15.5 12h.01M21 12h.01"/></svg></button>
         </div>
       </div>
       <div class="style-card shape-style-card">

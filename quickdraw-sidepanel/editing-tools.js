@@ -35,9 +35,6 @@
             ${button('distribute-y','纵向等间距','<g transform="rotate(90 12 12)"><path d="M3 3v18M21 3v18M6 7h3v10H6zM15 7h3v10h-3zM11 12h2"/></g>')}
             ${rawButton('center-canvas','中心对齐','<svg width="24" height="24" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M16 6H8C6.89543 6 6 6.89543 6 8V16" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 42H8C6.89543 42 6 41.1046 6 40V32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 42H40C41.1046 42 42 41.1046 42 40V32" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 6H40C41.1046 6 42 6.89543 42 8V16" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 24L16 24" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 32L24 16" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>')}
             <span class="bar-divider"></span>
-            ${button('group','组合 Ctrl/⌘+G','<rect x="3" y="3" width="12" height="12" rx="2"/><rect x="9" y="9" width="12" height="12" rx="2"/>')}
-            ${button('ungroup','取消组合 Ctrl/⌘+Shift+G','<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/><path d="M10 14 14 10"/>')}
-            <span class="bar-divider"></span>
           </div>
           <div class="mask-actions">
             ${button('intersect','相交：保留两个对象重合的部分','<rect x="3" y="3" width="12" height="12" rx="2"/><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M9 9h6v6H9z" fill="currentColor"/>')}
@@ -48,7 +45,7 @@
           ${button('flip-x','水平镜像','<path d="M12 2v20M3 18l6-12v12zM21 18 15 6v12z"/>')}
           ${button('flip-y','垂直镜像','<path d="M2 12h20M6 3l12 6H6zM6 21l12-6H6z"/>')}
           ${button('rotate','顺时针旋转 90° · 也可拖拽选框顶部旋转点','<path d="M19 9A8 8 0 1 0 20 15M19 3v6h-6"/>')}
-          <div id="vector-style" hidden><label title="矢量填充颜色">填充<input id="vector-fill" type="color" value="#1D1D1D" aria-label="矢量填充颜色"></label><label title="矢量描边颜色">描边<input id="vector-stroke" type="color" value="#1D1D1D" aria-label="矢量描边颜色"></label>${button('edit-nodes','编辑钢笔锚点','<path d="M4 18C4 3 20 21 20 6"/><rect x="2" y="16" width="4" height="4"/><rect x="18" y="4" width="4" height="4"/>')}</div>
+          <div id="vector-style" hidden><label title="填充颜色">填充<input id="vector-fill" type="color" value="#1D1D1D" aria-label="填充颜色"></label><label title="描边颜色">描边<input id="vector-stroke" type="color" value="#1D1D1D" aria-label="描边颜色"></label>${button('edit-nodes','编辑钢笔锚点','<path d="M4 18C4 3 20 21 20 6"/><rect x="2" y="16" width="4" height="4"/><rect x="18" y="4" width="4" height="4"/>')}</div>
         </div>
         <div id="crop-popover" class="popover image-options" hidden aria-label="图片裁剪设置"><strong>裁剪比例</strong><div class="preset-grid">${['自由','1:1','9:16','16:9','3:4','4:3'].map(r=>`<button data-crop-ratio="${r}">${r}</button>`).join('')}</div><form id="crop-custom"><label>宽<input name="width" type="number" min="0.01" step="any" value="1" required aria-label="自定义裁剪宽"></label><span>×</span><label>高<input name="height" type="number" min="0.01" step="any" value="1" required aria-label="自定义裁剪高"></label><button type="submit">开始</button></form><p>拖框后可调整 · 框内双击确认 · Esc 取消</p></div>
         <div id="grid-popover" class="popover image-options grid-editor" hidden role="dialog" aria-label="宫格图片编辑">
@@ -66,9 +63,7 @@
       $('#grid-custom').addEventListener('input',()=>this.refreshGridPreview());
       $('#crop-custom').addEventListener('submit',e=>{e.preventDefault();const f=e.target;this.beginRatioCrop(Number(f.elements.width.value)/Number(f.elements.height.value));});
       $('#grid-custom').addEventListener('submit',e=>{e.preventDefault();const f=e.target;const args=[Number(f.elements.cols.value),Number(f.elements.rows.value),Number(f.elements.gap.value)];if(this.gridMode==='stitch')this.stitchImageGrid(...args);else this.splitImageGrid(...args);});
-      for(const [selector,key] of [['#vector-fill','fillColor'],['#vector-stroke','strokeColor']])$(selector).addEventListener('change',e=>{
-        for(const el of this.getSelectedElements().filter(el=>el.type==='path')){el[key]=e.target.value;if(key==='fillColor')el.fill='solid';else el.stroke='solid';}this.commit();this.render();
-      });
+      for(const [selector,key] of [['#vector-fill','fillColor'],['#vector-stroke','strokeColor']]){const input=$(selector),apply=e=>{const targets=this.getSelectedElements().filter(el=>booleanShapeTypes.has(el.type));for(const el of targets){el[key]=e.target.value;if(key==='fillColor')el.fill='solid';else el.stroke='solid';}this.render();return targets.length;};input.addEventListener('input',apply);input.addEventListener('change',e=>{if(apply(e))this.commit();});}
       this.updateEditingUI();
     },
 
@@ -88,8 +83,9 @@
       const canImageMask=selected.length===2&&selected.filter(el=>el.type==='image').length===1&&selected.some(el=>shapeTypes.has(el.type));
       const canShapeBoolean=selected.length===2&&selected.every(el=>booleanShapeTypes.has(el.type));
       $('.mask-actions').hidden=!(canImageMask||canShapeBoolean);
-      const paths=selected.filter(el=>el.type==='path');$('#vector-style').hidden=!paths.length;
-      for(const [selector,key] of [['#vector-fill','fillColor'],['#vector-stroke','strokeColor']]){const input=$(selector);if(paths.length&&document.activeElement!==input)input.value=paths.at(-1)[key]||paths.at(-1).color||'#1f1f1f';}
+      const styleTargets=selected.filter(el=>booleanShapeTypes.has(el.type)),paths=styleTargets.filter(el=>el.type==='path');$('#vector-style').hidden=!styleTargets.length;
+      const editNodes=document.querySelector('[data-edit="edit-nodes"]');if(editNodes)editNodes.hidden=!paths.length;
+      for(const [selector,key] of [['#vector-fill','fillColor'],['#vector-stroke','strokeColor']]){const input=$(selector);if(styleTargets.length&&document.activeElement!==input)input.value=styleTargets.at(-1)[key]||styleTargets.at(-1).color||'#1f1f1f';}
       for(const b of document.querySelectorAll('[data-edit]'))if(!b.matches('[data-edit^="align-"],[data-edit^="distribute-"],[data-edit="center-canvas"],[data-edit="group"],[data-edit="ungroup"]'))b.disabled=busy;
       for(const popover of document.querySelectorAll('.image-options')){if(popover.id==='grid-popover'){const targets=this.gridMode==='stitch'?imageGroup:(oneImage?selected:[]);if(!targets.length||JSON.stringify(targets)!==this.gridTargetState)popover.hidden=true;}else if(!oneImage)popover.hidden=true;for(const control of popover.querySelectorAll('button,input'))control.disabled=busy||(control.id==='grid-apply'&&!this.gridPreviewReady);}
     },
@@ -132,7 +128,7 @@
       this.spatialDirty=true;this.commit();this.render();
     },
     flipSelection(axis){const b=this.getSelectionBBox();if(!b)return;this.transformItems(this.getSelectedElements(),V.around([axis==='x'?-1:1,0,0,axis==='y'?-1:1,0,0],{x:b.x+b.w/2,y:b.y+b.h/2}));this.commit();this.render();},
-    rotationHandlePoint(frame=this.getSelectionFrame()){if(!frame?.box)return null;const b=frame.box,gap=28/this.scale;return V.point(frame.matrix,{x:b.x+b.w/2,y:b.y-gap});},
+    rotationHandlePoint(frame=this.getSelectionFrame()){if(!frame?.box)return null;const b=frame.box,m=frame.matrix,top=V.point(m,{x:b.x+b.w/2,y:b.y}),gap=28/this.scale,nx=-m[2],ny=-m[3],len=Math.hypot(nx,ny)||1;return{x:top.x+nx/len*gap,y:top.y+ny/len*gap};},
     rotationHandleAt(p){const q=this.rotationHandlePoint();return !!q&&Math.hypot((p.x-q.x)*this.scale,(p.y-q.y)*this.scale)<=11;},
     drawRotationHandle(ctx,frame){const b=frame.box,top=V.point(frame.matrix,{x:b.x+b.w/2,y:b.y}),h=this.rotationHandlePoint(frame);ctx.save();ctx.strokeStyle='#2f6fed';ctx.fillStyle='#fff';ctx.lineWidth=1.2/this.scale;ctx.beginPath();ctx.moveTo(top.x,top.y);ctx.lineTo(h.x,h.y);ctx.stroke();ctx.beginPath();ctx.arc(h.x,h.y,5/this.scale,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.restore();},
 
@@ -150,7 +146,7 @@
     },
     drawSelectionFrame(ctx,frame,handles=true,alpha=1){
       if(!frame?.box)return;const corners=V.corners(frame.box).map(p=>V.point(frame.matrix,p));
-      ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=getComputedStyle(this.app).getPropertyValue('--sel').trim()||'#2f6fed';ctx.fillStyle=this.theme==='dark'?'#191713':'#F9FAFB';ctx.lineWidth=1.5/this.scale;ctx.setLineDash([]);
+      ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=getComputedStyle(this.app).getPropertyValue('--sel').trim()||'#2f6fed';ctx.fillStyle=this.themePaperColor();ctx.lineWidth=1.5/this.scale;ctx.setLineDash([]);
       ctx.beginPath();corners.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.stroke();
       if(handles){const size=7/this.scale,angle=Math.atan2(frame.matrix[1],frame.matrix[0]);for(const h of this.selectionFrameHandles(frame)){ctx.save();ctx.translate(h.x,h.y);ctx.rotate(angle);ctx.beginPath();ctx.rect(-size/2,-size/2,size,size);ctx.fill();ctx.stroke();ctx.restore();}}
       ctx.restore();
