@@ -2,16 +2,12 @@ name: 打包并发布 Quickdraw
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 permissions:
   contents: write
 
 jobs:
   release:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release-v3.9.3]') }}
     runs-on: ubuntu-latest
 
     steps:
