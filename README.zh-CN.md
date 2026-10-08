@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="icons/icon128.png" width="88" height="88" alt="Quickdraw 侧边栏画板">
+<img src="quickdraw-sidepanel/icons/icon128.png" width="88" height="88" alt="Quickdraw 侧边栏画板">
 
 # Quickdraw 侧边栏画板
 
@@ -8,7 +8,7 @@
 
 把网页文字、截图、Markdown 便签、可编辑流程图和图片工具，放进浏览器旁边的一张无限画布。
 
-English: [README.md](README.md)
+English: [README_EN.md](README_EN.md) · [中文项目首页](README.md)
 
 ![Manifest V3](https://img.shields.io/badge/Chrome_Extension-Manifest_V3-4263EB)
 ![Chrome 116+](https://img.shields.io/badge/Chrome-116%2B-16876b)
@@ -325,7 +325,7 @@ node --test tests/extension.test.js
 
 ## 许可与致谢
 
-扩展新增代码以 [MIT License](LICENSE) 开源。感谢 [Quickdraw 上游项目](https://github.com/quickdrawjs/quickdraw)；其版权和 MIT 许可保留在 [LICENSE_QUICKDRAW.txt](LICENSE_QUICKDRAW.txt)。本地图像处理使用 OpenCV，相关 Apache-2.0 许可见 [LICENSE_OPENCV.txt](LICENSE_OPENCV.txt)。第三方组件分别遵循各自许可。
+扩展新增代码以 [MIT License](LICENSE) 开源。感谢 [Quickdraw 上游项目](https://github.com/quickdrawjs/quickdraw)；其版权和 MIT 许可保留在 [LICENSE_QUICKDRAW.txt](quickdraw-sidepanel/LICENSE_QUICKDRAW.txt)。本地图像处理使用 OpenCV，相关 Apache-2.0 许可见 [LICENSE_OPENCV.txt](quickdraw-sidepanel/LICENSE_OPENCV.txt)。第三方组件分别遵循各自许可。
 
 ChatGPT、豆包、Grok 和 koukoutu 是对应服务方的产品，本项目不代表与它们存在官方合作或背书。
 

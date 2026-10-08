@@ -1,330 +1,214 @@
 <div align="center">
 
-<img src="icons/icon128.png" width="88" height="88" alt="Quickdraw Sidepanel">
+<img src="quickdraw-sidepanel/icons/icon128.png" width="88" height="88" alt="Quickdraw Sidepanel logo" />
 
-# Quickdraw Sidepanel
+# Quickdraw Sidepanel · 浏览器侧边栏画板
 
-**Browse. Capture. Draw — beside the page.**
+**边浏览，边收集，边画出来。**
 
-A local-first Chrome side panel for collecting web material, arranging Markdown notes, editing diagrams, and doing lightweight image work on an infinite canvas.
+把网页采集、无限画布、可编辑流程图、矢量绘制、图片处理和可选 AI，放进 Chrome 侧边栏。
 
-中文文档：[简体中文](README.zh-CN.md)
+Chrome 116+ · Manifest V3 · 原生 JavaScript · 本地优先 · 无须构建
 
-![Manifest V3](https://img.shields.io/badge/Chrome_Extension-Manifest_V3-4263EB)
-![Chrome 116+](https://img.shields.io/badge/Chrome-116%2B-16876b)
-![Vanilla JS](https://img.shields.io/badge/JavaScript-No_build_step-e8c34a)
-![Local first](https://img.shields.io/badge/Storage-Local--first-5b4db0)
-[![MIT License](https://img.shields.io/badge/License-MIT-4263EB)](LICENSE)
+[![MIT License](https://img.shields.io/badge/License-MIT-4263EB)](LICENSE) · [English](README_EN.md) · [详细中文手册](README.zh-CN.md)
 
-[Install](#install) · [Tutorial](https://www.bilibili.com/video/BV1UkYg6FEEG/) · [Why this exists](#why-this-exists) · [Try it](#try-it) · [Features](#features) · [AI](#ai) · [Privacy](#local-data-and-network-access)
+**[⬇ 下载最新版 v3.9.5](https://github.com/baize7815/quickdraw-sidepanel/releases/latest)** · **[▶ B 站 2 分多钟上手视频](https://www.bilibili.com/video/BV1UkYg6FEEG/)** · **[⭐ Star](https://github.com/baize7815/quickdraw-sidepanel)**
+
+[看实际效果](#先看实际效果) · [能做什么](#能做什么) · [三分钟装好](#三分钟装好) · [动手体验](#动手体验) · [作者](#关于作者)
+
+<img src="docs/images/overview.png" alt="Quickdraw 实际全幅画板界面：Markdown 便签、可编辑流程图和工具入口" width="100%" />
+
+<sub>真实全幅画板截图。相同画布也能缩进 Chrome 侧边栏，和正在阅读的网页并排使用。</sub>
 
 </div>
 
-![Annotated full-board screenshot: Markdown notes on the left, an editable flowchart in the center, plus board, tool, and style callouts](docs/images/overview.png)
+---
 
-<p align="center"><sub>Real UI in full-tab mode. Blue markers: ① boards ② fit canvas ③ drawing tools ④ style panel. The same board also opens in Chrome’s side panel, next to the page you are reading.</sub></p>
+## 先看实际效果
 
-Watch the walkthrough on Bilibili: **[quickdraw扩展教程](https://www.bilibili.com/video/BV1UkYg6FEEG/)** (~2:35). It covers capture, crop/collage, cutout, AI image edits, flowcharts, and PNG/SVG export.
+### 1. 网页在左，画板在右
+
+查资料时看到一张图片、一段话或一个灵感，不必先找地方存。选中文字、网页图片，或截取可见页面，可以直接从右键菜单送进 Quickdraw。继续加 Markdown 便签、连线和手绘标记，需要空间时一键展开成独立标签页。
 
 <div align="center">
-
-[![Watch the Quickdraw tutorial on Bilibili](https://i1.hdslb.com/bfs/archive/e370ef087fd99152c9ae4ef9173c3a05d7b84832.jpg)](https://www.bilibili.com/video/BV1UkYg6FEEG/)
-
+<img src="docs/images/sidepanel.svg" alt="网页和 Quickdraw 侧栏并排工作的布局示意" width="100%" />
+<sub>侧边栏使用场景示意；上方首页大图为真实界面。</sub>
 </div>
 
-## Why this exists
+### 2. 钢笔不是画完就死的线，节点还可以继续改
 
-While you research, images stay on the webpage, ideas go into a notes app, and flowcharts live in yet another tool. Quickdraw keeps those steps beside the browser: capture useful bits into the side panel, keep arranging them with notes, pens, and connectors, then expand to a full tab when you need more room.
+钢笔工具支持贝塞尔曲线、锚点和控制柄；闭合路径后还能编辑节点，分别调整填充与描边。工具栏、颜色板与线条样式也能随时修改。
 
-It fits research boards, product sketches, class notes, design references, and small flowcharts. It also fits putting an AI image back into the same working context, then cropping, tracing, annotating, and exporting it.
+<table>
+<tr>
+  <td width="50%" valign="top"><strong>钢笔路径与节点</strong><img src="docs/images/showcase/bezier-nodes.webp" alt="钢笔贝塞尔曲线控制柄编辑截图" width="100%" /></td>
+  <td width="50%" valign="top"><strong>曲线路径编辑</strong><img src="docs/images/showcase/pen-path.webp" alt="钢笔工具路径节点实机截图" width="100%" /></td>
+</tr>
+<tr>
+  <td width="50%" valign="top"><strong>绘制工具栏</strong><img src="docs/images/showcase/drawing-toolbar.webp" alt="Quickdraw 绘图快捷工具栏截图" width="100%" /></td>
+  <td width="50%" valign="top"><strong>颜色面板</strong><img src="docs/images/showcase/color-palette.webp" alt="画布调色板截图" width="100%" /></td>
+</tr>
+</table>
 
-![Side panel beside a webpage: the article stays on the left, Quickdraw collects notes and diagrams on the right](docs/images/sidepanel.svg)
+### 3. 思维导图和 Mermaid 可以继续编辑
 
-The basic board needs no account and no API key. The source is vanilla HTML, CSS, and JavaScript on Manifest V3. Download it and load it unpacked — there is no `npm install` and no build step.
+快速创建思维导图，添加分支并整理结构；也可以粘贴 Mermaid 源码，把受支持的图表解析成画布里的节点与连线，而不是仅仅放一张不可修改的截图。常见 Flowchart 支持较完整；Sequence、State、Gantt、Class Diagram 是有限子集。
 
-If it saves you a few tool switches, a GitHub **Star** is the simplest way to find it again and help other people find it too.
+<div align="center">
+<img src="docs/images/showcase/mindmap.webp" alt="Quickdraw 思维导图分支及层级效果截图" width="520" />
+</div>
 
-## How it compares
+### 4. 图片不用离开画板就能处理
 
-| | Quickdraw | Standalone / cloud whiteboards | Notes-only apps |
-| --- | --- | --- | --- |
-| Where you work | Chrome side panel, beside the current page | Usually a separate site or app | Usually leaves the page |
-| Page capture | Right-click text, images, or the visible tab | Mostly copy and paste | Mostly text excerpts |
-| Flowcharts | Mermaid import becomes editable nodes and edges | Depends; often a static image | Usually none |
-| Image tools | Crop, mask, grid-slice, grid collage, transparent-outline tracing | Rare, or export-then-edit | Usually none |
-| Default storage | Extension storage + IndexedDB on this profile | Often a cloud account | Depends |
-| How it runs | Load unpacked source, no build | Usually SaaS or a large frontend | Usually SaaS |
+自由裁剪与固定比例裁剪、旋转翻转、宫格切图与拼图、形状蒙版、本地修补、透明图轮廓描摹，都可以在画布上进行。处理后继续移动、叠加、标注，最后导出图片、矢量图或整个工程。
 
-Quickdraw is not Figma and not Photoshop. It finishes the job of “note it, draw it, crop it, take it with you” while you read, and it keeps diagrams editable.
+<img src="docs/images/vector-workflow.png" alt="真实画板示例：透明 PNG 轮廓转换为可单独编辑的矢量路径" width="100%" />
 
-![Six capabilities: page capture, editable diagrams, on-canvas image tools, transparent PNG tracing, optional AI, readable source](docs/images/features.svg)
+<sub>上图是透明 PNG 的 alpha 轮廓描摹：可保留孔洞并修改填充、描边，但不是能自动还原内部颜色和细节的全彩矢量化。</sub>
 
-## Install
+### 5. 画板里的可选 AI
 
-**Latest release: [v3.9.5](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.9.5)** — fixes Doubao AI image generation/editing returning no image to the canvas, recognizes original-resolution results instead of thumbnails, and improves sent-message confirmation. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.9.5/quickdraw-sidepanel-v3.9.5.zip), extract it, and load the folder containing `manifest.json` using the steps below.
+用已登录的 **ChatGPT、豆包、Grok** 网页完成支持的 AI 图片任务，把结果送回画布继续编辑。ChatGPT 与豆包还支持 AI Mermaid 的提示词发送；目前这条路径在网页确认发送后即结束任务，**不会自动读取回复并生成图表**，避免文档承诺超过实际实现。
 
-Use **Check for updates** in the More menu to check GitHub manually; there are no periodic checks. Updating an unpacked extension requires extracting the new ZIP over the original folder and clicking Reload in the extension manager. Export a project backup first; do not uninstall the extension.
+<details>
+<summary><strong>展开更多真实界面：工具菜单、操作面板和弹窗</strong></summary>
 
-The public install path is unpacked source. Use desktop **Chrome 116 or newer**. Other Chromium browsers need the matching extension APIs; verify them yourself.
+<table>
+<tr>
+<td width="33%" valign="top"><img src="docs/images/showcase/feature-menu.webp" alt="扩展功能菜单截图" width="100%" /></td>
+<td width="33%" valign="top"><img src="docs/images/showcase/more-menu.webp" alt="画板的更多菜单截图" width="100%" /></td>
+<td width="33%" valign="top"><img src="docs/images/showcase/canvas-dialog.webp" alt="Quickdraw 操作弹窗截图" width="100%" /></td>
+</tr>
+</table>
 
-![Four-step unpacked install: download, open chrome://extensions, enable Developer mode, load the folder that contains manifest.json](docs/images/install.svg)
+</details>
 
-1. Download the release ZIP, or use **Code → Download ZIP** for the source repository, then extract it.
-2. Open `chrome://extensions/` in Chrome.
-3. Turn on **Developer mode** in the top-right corner.
-4. Click **Load unpacked**. For a release ZIP, select the extracted folder containing `manifest.json`; for the source repository, select `quickdraw-sidepanel/`.
-5. Find **Quickdraw 侧边栏画板** in the extensions menu, optionally pin it, and click the icon to open the board.
+以上 WebP 为项目真实界面局部截图；原仓库的 `overview.png` 和 `vector-workflow.png` 是标注过的实际画板展示。部分 SVG、功能图解属于**说明示意**，不冒充运行截图。
 
-You do not need `npm install`, a backend, or a bundler. Keep the loaded directory in place; Chrome keeps reading files from that path.
+---
 
-**Updating:** export a `.quickdraw` backup first, replace files in the same extension directory, reload the extension on the extensions page, then close and reopen the side panel. If AI page scripts changed, refresh any already-open provider tab while no generation task is running.
+## 能做什么
 
-## Try it
-
-### Import a demo project
-
-Download either `.quickdraw` file below, then use **board menu → Import project** at the bottom of the board. The demo is added as a new board and stays editable.
-
-| Demo | What you can try |
+| 你想做 | Quickdraw 提供的能力 |
 | --- | --- |
-| [Inspiration board](docs/examples/inspiration-board.quickdraw) | Markdown notes, node connections, editing text and color |
-| [Transparent image and vector](docs/examples/vector-workflow.quickdraw) | Compare a transparent PNG with a traced path; try fill, stroke, rotate, and node editing |
+| 「看到有用的网页内容，先收起来」 | 网页选中文字、图片和可见标签页截图右键发送到画板 |
+| 「做个灵感墙、课堂笔记、产品草图」 | 无限画布、Markdown 便签、自由绘制、几何图形、吸附、对齐、成组与层级 |
+| 「把脑子里的结构画出来」 | 思维导图、可编辑 Mermaid Flowchart、锚定连线、分支折叠和布局 |
+| 「画可继续修改的线稿」 | 钢笔与贝塞尔路径、节点编辑、填充和描边、透明轮廓转矢量 |
+| 「一张图裁成九宫格，或几张图拼起来」 | 比例裁剪、宫格切图与拼图、旋转翻转、图片遮罩与本地修补 |
+| 「让 AI 帮忙处理图片」 | 通过已经登录的 AI 网页发起支持的图片编辑任务；需要网络和相应账号 |
+| 「保存成果，下次接着改」 | 多画板、本地保存、版本记录，导出 JPG / PNG / 透明 PNG / SVG / `.quickdraw` 项目 |
 
-If GitHub shows the file contents, use **Download raw file** and keep the `.quickdraw` suffix. Screenshots and demos use documentation sample content.
+Quickdraw 不打算替代完整的 Photoshop 或 Figma；更适合把“看网页时顺手记下、画出来、裁一下、导出去”放在同一处。
 
-### Capture one idea from a webpage
+## 三分钟装好
 
-On a normal webpage, select text and right-click **发送选中文字到 Quickdraw** (Send selected text to Quickdraw). It lands on the board; you can then drop in images, add notes, and mark relationships with pens and arrows. Images use **发送图片到 Quickdraw**; the visible tab uses **截取当前可见页面到 Quickdraw**.
+**最新版：[v3.9.5](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.9.5)**。这一版重点修复豆包 AI 生图、改图完成后回传画布的问题，并改进原图识别与发送确认。
 
-Chrome internal pages, some restricted sites, and images without granted host access may fail. You can also import local files from the image button, drag-and-drop, or paste. The image picker supports selecting multiple files, and you can drag several image files onto the canvas at once. A batch is spaced into a grid, grouped and selected together, and can be undone in one step; ungroup it when you want independent editing. Unreadable or oversized files are reported and skipped while valid images are imported. Each image must be within 25 MB and 50 million pixels.
+1. 下载 **[Quickdraw v3.9.5 ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.9.5/quickdraw-sidepanel-v3.9.5.zip)**，解压。
+2. 在桌面版 Chrome 打开 `chrome://extensions/`，开启右上角 **开发者模式**。
+3. 点击 **加载已解压的扩展程序**，选择解压目录中**直接包含 `manifest.json` 的文件夹**。
+4. 点击工具栏中的 **Quickdraw 侧边栏画板** 扩展图标，开始画图。
 
-### Turn Mermaid into an editable flowchart
+<img src="docs/images/install.svg" alt="Chrome 扩展四步安装示意" width="100%" />
 
-Click the bottom **`</>`** button, paste the source below, press **Enter** to generate, and **Shift + Enter** for a new line:
+无需 `npm install`，无需单独部署服务器，也不用运行构建工具。若通过 GitHub 的 **Code → Download ZIP** 获取源码，加载的应是仓库内的 `quickdraw-sidepanel/` 子目录。
+
+> **升级别直接卸载。** 请先导出 `.quickdraw` 备份，再覆盖原扩展文件夹并从 Chrome 扩展管理页点击重新加载。换浏览器或用户配置也需要通过项目文件迁移，扩展数据不会自动跨设备同步。
+
+## 动手体验
+
+**体验 ①：导入一张能继续编辑的画板。** 下载 [灵感工作台](docs/examples/inspiration-board.quickdraw) 或 [透明图片与矢量示例](docs/examples/vector-workflow.quickdraw)，从画板菜单选择“导入项目”。可以修改便签、拖动节点、调整填充与连线。
+
+**体验 ②：从网页收集内容。** 选择页面文字，右键“发送选中文字到 Quickdraw”；或者在图片上选择“发送图片到 Quickdraw”。不方便右键时也可以粘贴、拖入或批量导入本地图片。
+
+**体验 ③：粘贴 Mermaid。** 在画板下方打开 `</>` 入口，输入下面的流程图。生成后可拖动节点、编辑文本和连线。
 
 ```mermaid
 flowchart LR
-    A[Collect] --> B[Arrange]
-    B --> C{Need image work?}
-    C -->|Yes| D[Edit locally]
-    C -->|No| E[Export]
-    D --> E
+  A[浏览网页] --> B[采集内容]
+  B --> C[画板里整理]
+  C --> D{要导出吗?}
+  D -->|图片| E[PNG / JPG]
+  D -->|继续编辑| F[SVG / .quickdraw]
 ```
 
-After it generates, drag nodes, double-click to edit text, change colors, or delete edges. Flowchart is the most complete editable subset; the AI/import path also supports bounded Sequence, State, Gantt, and Class Diagram subsets.
+更具体的裁剪比例、切图间距、图片上限、快捷键、权限解释及常见问题都整理在 **[详细中文使用手册](README.zh-CN.md)**。
 
-The working path is four steps:
+## 保存与导出
 
-![Browse, capture, arrange, export](docs/images/workflow.svg)
-
-## Features
-
-| You want to | Quickdraw gives you |
+| 格式 | 适合场景 |
 | --- | --- |
-| Sketch and jot | Infinite canvas, pen, highlighter, eraser, lines, curved arrows, and geometry |
-| Collect reading and references | In-place text, Markdown notes, image import, right-click page capture |
-| Structure a process | Mind maps, editable Mermaid flowcharts, anchored connectors, branch fold and layout |
-| Tighten layout | Multi-select, group, duplicate, z-order, align, distribute, snap to grid |
-| Edit images | Free and ratio crop, rotate, flip, grid-slice, grid collage, image-and-shape masking |
-| Make vector shapes | Pen/Bezier paths, node editing, transparent-image contour tracing, independent fill and stroke |
-| Continue with AI | ChatGPT / Doubao mind maps and image edits, Grok image edits, online background removal |
-| Keep and take results | Multiple boards, local autosave, version history, board search, PNG / SVG / project / asset export |
+| JPG / PNG | 放到报告、文章或幻灯片 |
+| 透明 PNG | 表情、贴图、叠加素材 |
+| SVG | 矢量布局；图片元素仍以位图嵌入 |
+| `.quickdraw` | 备份整个画板项目，跨浏览器配置迁移后继续编辑 |
 
-The canvas has light and dark themes, plus square, dot, line, cross, isometric, and no-grid views. Use the top-left control to open the same board in a new tab when you need more space.
+数据默认保存在当前 Chrome 配置的扩展存储与 IndexedDB 中，图像和历史版本也占用本地空间。定期导出 `.quickdraw` 备份，比指望浏览器卸载后自动恢复靠谱得多。
 
-### Image workflow: from asset to editable shape
+## AI 与隐私边界
 
-![Real example: a green transparent PNG on the left becomes a selected blue vector path with independent fill and stroke on the right, holes preserved](docs/images/vector-workflow.png)
+**不用 AI 也能画。** 便签、思维导图、手绘、手动 Mermaid 导入、裁剪、蒙版、透明轮廓描摹和多数本地图像处理不需要登录任何在线服务。AI 只是可选扩展能力。
 
-Select a transparent image and run contour tracing to create a separate vector shape beside the original. The source image stays. You can then change fill, enable stroke, rotate, or edit path nodes.
+需要联网的功能会把你选中的提示词、图片等内容发送到对应服务：ChatGPT、豆包、Grok 等 AI 网站，以及在线抠图的 Koukoutu。某些权限会在首次使用相关功能时才请求。浏览器资料和工程默认不自动同步到云端。
 
-**This traces the alpha contour.** Holes can be preserved, but internal colors and illustration detail are not recovered. Images without a transparent background usually yield only an outer frame. Static SVG copied to the canvas can also be converted into editable native vector paths when it stays inside the supported safe subset; scripts, external resources, text, filters, masks, gradients, stylesheets, and other active or unsupported content are rejected.
+在线抠图还需要按服务要求提交交互校验值，其中会在本地读取部分浏览器环境与指针动作信息参与计算；详情见 **[完整隐私与权限说明](README.zh-CN.md#本地数据与网络访问)**。Quickdraw 本身无自建账号体系，也无需填写服务商 API Key，但不代表所有操作都离线。
 
-The board also supports:
+<img src="docs/images/privacy.svg" alt="本地数据和可选联网能力的说明图" width="100%" />
 
-- **Adjustable crop:** click the crop button for free crop; double-click the button to pick `1:1`, `9:16`, `16:9`, `3:4`, `4:3`, or a custom ratio. Drag to draw a crop box, then release to adjust it: drag inside to move it or use any of the eight handles to resize. Double-click inside the box to apply; `Esc` cancels. Fixed ratios, rotation, and flips are preserved; cropping can be undone.
-- **Grid slice:** select one image and use the left toolbar to preview rows, columns, and spacing before confirming. Presets include `1×2`, `2×1`, `2×2`, `2×3`, `3×2`, and `3×3` (columns × rows); custom grids support up to 100 pieces. Spacing uses source-image pixels: `0` is seamless, positive values skip strips between cells, and negative values include overlapping content in adjacent slices. Slices stay within the source image and retain its placement, rotation, and flips. Each piece can be moved or exported; undo restores the source.
-- **Grid collage:** group at least two images with `Ctrl / ⌘ + G`, then select the complete group. The left-toolbar collage action appears only when every group member is an image. Preview the grid and spacing, then generate a new PNG beside the original group. Images follow their canvas order, top to bottom and left to right, and fit fully inside equal-sized cells without stretching. Positive spacing leaves transparent gaps; negative spacing overlaps cells, with later images drawn over earlier ones. The original group stays, and generation can be undone. Use enough cells for all images (up to 100); unused cells remain transparent. Output is limited to 18 million pixels and 16,384 pixels per side.
-- **Image mask:** select one image plus one shape/stroke, then intersect, subtract, or split. The result is a transparent PNG.
-- **Local repair:** OpenCV Telea inpainting on a boxed region. The image is not uploaded.
-- **Online background removal:** Koukoutu generates a transparent background, one image at a time for multi-select. This uploads the selected image and submits the service’s interaction checksum.
+## 代码与维护
 
-## AI
-
-AI is optional. The basic board does not depend on it. Current integrations drive the provider webpage with content scripts. **There is no API key field in the extension**, but you must be able to open and sign in to the provider. Quotas, billing, and generation quality belong to that platform and your account.
-
-| Provider | Mind map / Mermaid | Image editing | How it runs |
-| --- | --- | --- | --- |
-| ChatGPT (UI label: GPT) | Yes | Yes | Bound tab in the same browser profile |
-| Doubao | Yes | Yes | Auto-activates a dedicated tab; keep it visible until the task finishes |
-| Grok | Not yet | Yes | Grok webpage for image tasks |
-
-**Image editing:** select objects on the board, open AI image edit, pick a provider, and describe the change — for example, “recolor image 1 using image 2.” At most four input images. A text prompt is optional; results depend on the provider. Successful reads return to the board for further editing or export.
-
-**AI Mermaid:** open the AI entry, choose a Flowchart, Sequence, State, Gantt, or Class Diagram preset, then describe the diagram. For AI Mermaid, Quickdraw now ends the task as soon as the provider page verifies that the prompt was sent. It no longer reads or auto-imports the reply, and the provider tab stays open.
-
-The first use asks for site access; new result-image hosts may need another grant. Task status covers upload, generation, result reading, or user action needed. The extension does not automatically resend a request it cannot confirm was sent.
-
-> Webpage integrations depend on login, network, account quota, and provider DOM changes. This is not an official vendor API and is not guaranteed to keep working on every platform. Keep the Doubao tab visible. If a session conflict is reported, the task pauses and keeps the page; continue or cancel after you confirm. Hidden, minimized, or discarded tabs are not promised to keep generating.
-
-## Save, export, and move
-
-| Format / entry | Best for | Difference that matters |
-| --- | --- | --- |
-| JPG | Sharing, slides, documents | White-background visual snapshot; `Ctrl / ⌘ + E` |
-| PNG | Sharing, slides, documents | Visual snapshot of the board |
-| Transparent PNG | Stickers and overlays | No canvas background |
-| SVG | Vector layout and scaling | Text and native shapes stay vector; rasters embed as bitmaps |
-| Export selection as PNG / SVG | Download only selected objects | Use the board menu; PNG has a transparent background and no added outer margin, SVG retains native vector shapes and embeds images. Saves to the configured export directory or browser download location. |
-| `.quickdraw` | Backup, migration, keep editing | Boards plus referenced image assets |
-| Current image download | Take processed assets out | One file, or a ZIP for many; current image, not the original history |
-
-Project export is not a dump of every historical snapshot. For important work, export `.quickdraw` regularly and keep PNG / SVG deliverables. There is no PDF export in the current UI.
-
-## Shortcuts
-
-Give the board focus first. While editing text, some keys behave as typing.
-
-| Action | Shortcut |
-| --- | --- |
-| Select / hand | `V` / `H` |
-| Draw / highlighter / eraser | `D` / `I` / `E` |
-| Pen / line / arrow | `K` / `L` / `A` |
-| Shape / text / note / mind map | `G` / `T` / `N` / `M` |
-| Temporary pan | Hold Space and drag, or middle-mouse drag |
-| Fit all content | `F` |
-| Mind-map child / sibling | `Tab` / `Shift + Tab` |
-| Undo / redo | `Ctrl / ⌘ + Z` / `Ctrl / ⌘ + Shift + Z` |
-| Duplicate selection | `Ctrl / ⌘ + D`, or `Alt + drag` |
-| Copy selection as transparent PNG | `Ctrl / ⌘ + C` |
-| Send backward / bring forward one layer | `Ctrl / ⌘ + [` / `Ctrl / ⌘ + ]` |
-| Send to back / bring to front | `Ctrl / ⌘ + Shift + [` / `Ctrl / ⌘ + Shift + ]` |
-| Confirm / cancel crop | Double-click inside the crop box / `Esc` |
-| Group / ungroup | `Ctrl / ⌘ + G` / `Ctrl / ⌘ + Shift + G` |
-| Search board text | `Ctrl / ⌘ + F` |
-| Export JPG | `Ctrl / ⌘ + E` |
-| Delete selection or connector | `Delete` / `Backspace` |
-
-In the pen tool, click to place an anchor and drag for curve handles. Click the start point to close a path, `Enter` to finish an open path, `Esc` to cancel. Selected paths can enter node editing.
-
-## Local data and network access
-
-Quickdraw does not provide or require its own project account. Third-party AI platforms may still require login. Board documents and preferences live in Chrome extension storage; images, versions, and export-directory handles use IndexedDB. Data belongs to the current browser profile and does not sync across devices or profiles by itself.
-
-![Local-first vs optional network: drawing and local image tools stay in the browser; AI and online background removal send selected inputs](docs/images/privacy.svg)
-
-| Feature | Where it runs / where data goes |
-| --- | --- |
-| Drawing, notes, mind maps, Mermaid import | Local browser |
-| Crop, slice, mask, transparent contour, Telea | Local browser; bundled OpenCV loads on demand |
-| Page capture | Reads page content or images you asked for; remote images may need host access |
-| AI mind maps and image tasks | Sends the prompt and selected inputs to the provider you chose |
-| AI background removal | Uploads selected images to Koukoutu and submits the required interaction checksum |
-
-The background-removal checksum module reads browser identity, language, viewport, timezone, and recent pointer motion locally, then derives the code submitted with the job. Those raw fields are not sent as separate form fields, but the code is produced from them.
-
-Permissions cover the side panel, storage, context menus, downloads, the active tab, clipboard write, scripting, and tab groups. Koukoutu hosts are declared up front; other site access is requested when a flow needs it. [quickdraw-sidepanel/manifest.json](quickdraw-sidepanel/manifest.json) is authoritative.
-
-### Storage cost
-
-Images and history use local disk. “Local-first” does not mean “free storage.” Undo is capped at 10 steps, version history at 30 records per board, and AI task history at 24 records. Image URL caches can be reused and released.
-
-**Known boundary:** deleting an object or board does not yet reclaim every unreferenced IndexedDB image globally. The top-left clear action deletes all boards, image assets, and history, while keeping preferences and the export directory. Back up first. This is not a “clear website cache” button.
-
-## FAQ
-
-<details>
-<summary><strong>Can I use the full board without AI?</strong></summary>
-
-Yes. Drawing, text, notes, mind maps, manual Mermaid import, local image tools, and export do not depend on AI platforms. Only online background removal and AI generation need those services.
-
-</details>
-
-<details>
-<summary><strong>The AI page already finished. Why is nothing on the board?</strong></summary>
-
-Check the task error first. Confirm the page is not asking for login, verification, or extra image permission. Keep the Doubao tab visible. The content script has to recognize this request and its complete result. Provider DOM changes, missing original-image URLs, or Mermaid outside the supported subset can block import. Do not resubmit the same task until you know the current status.
-
-</details>
-
-<details>
-<summary><strong>Tracing produced a single color blob. Is that a bug?</strong></summary>
-
-Transparent-contour tracing reads alpha, not the artwork inside. A color illustration becoming a solid outline is the expected result. You can still edit fill and stroke. It is not a full-color auto-vectorizer.
-
-</details>
-
-<details>
-<summary><strong>Does it support every Mermaid diagram?</strong></summary>
-
-No. It supports bounded subsets of Flowchart, Sequence Diagram, State Diagram, Gantt, and Class Diagram. Advanced Mermaid constructs and arbitrary extensions remain out of scope.
-
-</details>
-
-<details>
-<summary><strong>How do I keep work when changing computers, profiles, or uninstalling?</strong></summary>
-
-Export a `.quickdraw` project, install the extension in the new environment, then import it. Browser profiles do not sync this data. Backing up the extension folder is not a backup of your boards.
-
-</details>
-
-<details>
-<summary><strong>Why load unpacked source instead of a store listing?</strong></summary>
-
-The public path is unpacked loading so you can read the source, file issues, and patch it yourself. A store listing is not required to use the board. After loading, keep that directory; do not delete or casually move it.
-
-</details>
-
-## Development
-
-The extension runs from source. Code is split across the board, image tools, storage, and AI page adapters:
+整个扩展基于 Chrome Manifest V3，使用原生 HTML、CSS 和 JavaScript。核心安装目录就是 `quickdraw-sidepanel/`；不用安装依赖才能运行。开发测试有 Node.js 脚本，部分浏览器测试需要独立安装 Playwright。
 
 ```text
-quickdraw-sidepanel/     loadable extension root
-  manifest.json          entry and permissions
-  sidepanel.html / .css  board UI
-  sidepanel.js           canvas, interaction, files, export
-  editing-tools.js       pen, transform, image operations
-  vector-utils.js        path and geometry
-  storage.js             local assets, history, IndexedDB
-  background.js          side panel, page capture, background entry
-  ai-protocol.js         provider capabilities, tasks, Mermaid validation
-  ai-router.js           AI routing, recovery, result import
-  ai-*-provider.js       provider adapters
-  *-content.js           provider page scripts
-  opencv-sandbox.*       local OpenCV sandbox
-tests/                   unit and lifecycle regression
-docs/                    screenshots, diagrams, importable demos
-scripts/                 packaging and release helpers
-llms.txt                 machine-readable project summary
-README.zh-CN.md          Chinese documentation
+quickdraw-sidepanel/
+├── quickdraw-sidepanel/      # 可以加载到 Chrome 的扩展目录
+│   ├── manifest.json
+│   ├── sidepanel.html/.css/.js
+│   ├── editing-tools.js     # 绘图、变换及图片编辑
+│   ├── vector-utils.js      # 矢量几何和路径
+│   ├── storage.js           # 工程与历史记录
+│   ├── ai-*-provider.js     # AI 网页接入
+│   └── *-content.js        # 网页内容脚本
+├── docs/examples/           # 可导入的 .quickdraw 示例
+├── docs/images/             # 产品截图与说明图
+├── tests/                   # 逻辑和生命周期回归
+├── scripts/                 # 打包、发布辅助脚本
+└── README.md
 ```
 
-### Verify changes
+基础测试可用 `node --test tests/core.test.js tests/vector.test.js`，实际浏览器测试见 [开发说明](README.zh-CN.md#开发与测试)。
 
-Core logic uses the Node.js built-in test runner:
+## 为什么做它
 
-```sh
-node --test tests/core.test.js tests/vector.test.js
-```
+浏览网页做笔记、收集素材、画思维导图、稍微修张图，常常要开好几个工具，越整理越像在搬家。Quickdraw 想把这些短流程合到浏览器旁边：看到素材就收，想到关系就画，需要加工就现场做，完成后再导出。
 
-Browser tests also need a `playwright` package resolvable by Node.js, plus a supported Chrome / Chromium. That is a **development** dependency, not an install requirement for the extension.
+它仍然是一张本地优先、可以离开 AI 独立使用的画布；在线 AI 只是有需要时再调用的能力。
 
-```sh
-node --test tests/browser.test.js
-node --test tests/extension.test.js
-```
+## 关于作者
 
-`browser.test.js` uses local Chrome by default. Real unpacked-extension launch tests need a Chromium build that still allows command-line extension loading; set `QD_EXTENSION_CHROMIUM` to that binary. Missing that browser skips the corresponding tests. Tests use isolated sessions and do not read daily board data.
+项目由 **[@baize7815](https://github.com/baize7815)** 维护与扩展，欢迎讨论体验、报告兼容性问题，或提交 Pull Request。作者的其他公开联系方式：
 
-Issues and pull requests are welcome. Include browser version, extension version, reproduction steps, expected vs actual results, and screenshots with private content removed. For AI problems, name the provider and the stuck stage. Do not paste cookies, tokens, or private chats.
+| 平台 | 找到我 |
+| --- | --- |
+| GitHub | [@baize7815](https://github.com/baize7815) |
+| 𝕏 / Twitter | [@Mislay_zero](https://x.com/Mislay_zero) |
+| 小红书 | [沈小鱼](https://www.xiaohongshu.com/user/profile/69f738ba0000000002002004) |
+| B 站 | [这货包子娘](https://space.bilibili.com/408360699) · [Quickdraw 使用教程](https://www.bilibili.com/video/BV1UkYg6FEEG/) |
+| 微信 | 搜索 **「白泽宝宝想吃炸鸡」** |
 
-Useful contribution areas: provider page adapters, reproducible tests, large-board performance, image-asset reclaim, docs, and translations. New-feature discussions work best with a concrete use case.
+## 开源许可与致谢
 
-## License and credits
+项目新开发代码使用 [MIT License](LICENSE)。本项目基于开源的 [Quickdraw](https://github.com/quickdrawjs/quickdraw) 发展，原项目的 MIT 版权与许可说明保留在 [LICENSE_QUICKDRAW.txt](quickdraw-sidepanel/LICENSE_QUICKDRAW.txt)；本地图像处理使用的 OpenCV 另有 [Apache-2.0 许可说明](quickdraw-sidepanel/LICENSE_OPENCV.txt)。第三方组件与 AI 服务名称、商标各归其权利人，本扩展不是这些服务的官方产品。
 
-New extension code is [MIT](LICENSE). Thanks to the [upstream Quickdraw project](https://github.com/quickdrawjs/quickdraw); its copyright and MIT notice remain in [LICENSE_QUICKDRAW.txt](LICENSE_QUICKDRAW.txt). Local image processing uses OpenCV under Apache-2.0; see [LICENSE_OPENCV.txt](LICENSE_OPENCV.txt). Other third-party components keep their own licenses.
+---
 
-ChatGPT, Doubao, Grok, and Koukoutu belong to their vendors. This project does not claim official partnership or endorsement.
+<div align="center">
 
-Version history lives in [README.txt](README.txt). For current behavior, prefer this README, [README.zh-CN.md](README.zh-CN.md), [llms.txt](llms.txt), and the source.
+**网页还在眼前，灵感已经上了画板。**
+
+[⭐ Star 项目](https://github.com/baize7815/quickdraw-sidepanel) · [⬇ 最新 Release](https://github.com/baize7815/quickdraw-sidepanel/releases/latest) · [🐛 反馈问题](https://github.com/baize7815/quickdraw-sidepanel/issues)
+
+<sub>MIT · 维护者 <a href="https://github.com/baize7815">@baize7815</a> · 致谢 upstream Quickdraw</sub>
+
+</div>
