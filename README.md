@@ -70,18 +70,22 @@ Chrome 116+ · Manifest V3 · 原生 JavaScript · 本地优先 · 无须构建
 
 用已登录的 **ChatGPT、豆包、Grok** 网页完成支持的 AI 图片任务，把结果送回画布继续编辑。ChatGPT 与豆包还支持 AI Mermaid 的提示词发送；目前这条路径在网页确认发送后即结束任务，**不会自动读取回复并生成图表**，避免文档承诺超过实际实现。
 
-<details>
-<summary><strong>展开更多真实界面：工具菜单、操作面板和弹窗</strong></summary>
+### 6. 功能菜单和更多选项，一眼就能找到
+
+常用工具与功能入口集中在菜单里，不需要为了找一个操作在整张画布上翻来翻去。下面是实际扩展界面的功能菜单和更多菜单：
 
 <table>
 <tr>
-<td width="33%" valign="top"><img src="docs/images/showcase/feature-menu.webp" alt="扩展功能菜单截图" width="100%" /></td>
-<td width="33%" valign="top"><img src="docs/images/showcase/more-menu.webp" alt="画板的更多菜单截图" width="100%" /></td>
-<td width="33%" valign="top"><img src="docs/images/showcase/canvas-dialog.webp" alt="Quickdraw 操作弹窗截图" width="100%" /></td>
+  <td width="50%" valign="top" align="center"><strong>功能菜单</strong><br/><img src="docs/images/showcase/feature-menu.webp" alt="Quickdraw 功能菜单实机截图" width="100%" /></td>
+  <td width="50%" valign="top" align="center"><strong>更多选项</strong><br/><img src="docs/images/showcase/more-menu.webp" alt="Quickdraw 更多菜单实机截图" width="100%" /></td>
 </tr>
 </table>
 
-</details>
+部分工具会弹出独立的操作面板，便于确认参数：
+
+<div align="center">
+<img src="docs/images/showcase/canvas-dialog.webp" alt="Quickdraw 操作面板实机截图" width="480" />
+</div>
 
 以上 WebP 为项目真实界面局部截图；原仓库的 `overview.png` 和 `vector-workflow.png` 是标注过的实际画板展示。部分 SVG、功能图解属于**说明示意**，不冒充运行截图。
 
