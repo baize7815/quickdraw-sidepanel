@@ -61,7 +61,7 @@ Quickdraw 不是 Figma，也不是完整的 Photoshop。它把「看网页时顺
 
 ## 快速安装
 
-**最新发行版：[v3.9.4](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.9.4)**，微调画布文字排版：默认行高 1.3、字距约 0.04em，同时将便签圆角收紧到 6px，使中文多行文本和便签视觉更利落。[下载安装包](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.9.4/quickdraw-sidepanel-v3.9.4.zip)并解压，按下方步骤加载包含 `manifest.json` 的目录。
+**最新发行版：[v3.9.5](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.9.5)**，修复豆包 AI 图片生成/编辑成功却未回传画布的问题，兼容新版原图字段与消息确认逻辑，只导入原图、不混入缩略图。[下载安装包](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.9.5/quickdraw-sidepanel-v3.9.5.zip)并解压，按下方步骤加载包含 `manifest.json` 的目录。
 
 更多菜单中的“检查更新”只在点击时访问 GitHub，不进行每日或后台定时检查。发现新版后点击下载，先导出项目备份，再解压覆盖原扩展目录，在扩展管理页点击“重新加载”并重开侧边栏；无需卸载扩展。
 

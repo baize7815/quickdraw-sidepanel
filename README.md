@@ -61,7 +61,7 @@ Quickdraw is not Figma and not Photoshop. It finishes the job of “note it, dra
 
 ## Install
 
-**Latest release: [v3.9.4](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.9.4)** — fine-tunes canvas typography with 1.3 line height and 0.04em tracking, and reduces sticky-note corner radius for a cleaner shape. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.9.4/quickdraw-sidepanel-v3.9.4.zip), extract it, and load the folder containing `manifest.json` using the steps below.
+**Latest release: [v3.9.5](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.9.5)** — fixes Doubao AI image generation/editing returning no image to the canvas, recognizes original-resolution results instead of thumbnails, and improves sent-message confirmation. [Download the extension ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.9.5/quickdraw-sidepanel-v3.9.5.zip), extract it, and load the folder containing `manifest.json` using the steps below.
 
 Use **Check for updates** in the More menu to check GitHub manually; there are no periodic checks. Updating an unpacked extension requires extracting the new ZIP over the original folder and clicking Reload in the extension manager. Export a project backup first; do not uninstall the extension.
 

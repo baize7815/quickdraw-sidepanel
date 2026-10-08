@@ -59,7 +59,8 @@
       if (/^blob:|^data:image\//i.test(text)) return true;
       try {
         const parsed = new URL(text);
-        return parsed.protocol === 'https:' && !parsed.port && !parsed.username && !parsed.password && (parsed.hostname === 'www.doubao.com' || parsed.hostname.endsWith('.doubao.com'));
+        const host = parsed.hostname.toLowerCase();
+        return parsed.protocol === 'https:' && !parsed.port && !parsed.username && !parsed.password && (host === 'doubao.com' || host.endsWith('.doubao.com') || host === 'byteimg.com' || host.endsWith('.byteimg.com'));
       } catch { return false; }
     }
     getOutputPermissionOrigins(url) {
@@ -101,7 +102,7 @@
       if (!this.usesRawImageBridge() || task?.kind !== 'image-edit') return '';
       const token = this.rawBridgeToken();
       const results = await chrome.scripting.executeScript({ target: { tabId: task.tabId }, world: 'MAIN', args: [task.taskId, token], func: (taskId, bridgeToken) => {
-        const KEY = '__quickdrawDoubaoRawBridgeV2', VERSION = 3;
+        const KEY = '__quickdrawDoubaoRawBridgeV2', VERSION = 4;
         if (globalThis[KEY]?.version === VERSION && globalThis[KEY]?.taskId === taskId) {
           return { installed: true, token: globalThis[KEY].token, version: VERSION, reused: true };
         }
@@ -128,16 +129,37 @@
         };
         const identifiers = value => {
           const result = [];
-          const add = candidate => { const text = String(candidate || '').trim(); if (text.length >= 8 && text.length <= 200 && !result.includes(text)) result.push(text); };
-          if (value && typeof value === 'object') for (const key of ['id','image_id','imageId','creation_id','creationId','identifier']) add(value[key]);
+          const add = candidate => { const text = String(candidate || '').trim(); if (text.length >= 8 && text.length <= 240 && !result.includes(text)) result.push(text); };
+          if (value && typeof value === 'object') for (const key of ['id','image_id','imageId','creation_id','creationId','creation_task_id','creationTaskId','resource_id','resourceId','message_id','messageId','block_id','blockId','identifier','uri']) add(value[key]);
           return result;
+        };
+        const rawFrom = value => {
+          if (!value || typeof value !== 'object') return '';
+          const meta = value.imageMeta || value.image_meta || null;
+          const candidates = [
+            value.image_ori_raw, value.imageOriRaw, value.image_raw, value.imageRaw,
+            value.original_raw, value.originalRaw,
+            meta?.originalRaw, meta?.original_raw, meta?.imageRaw, meta?.image_raw,
+            value.media?.imageMeta?.originalRaw, value.media?.image_meta?.original_raw
+          ];
+          for (const candidate of candidates) {
+            const url = urlFrom(candidate);
+            if (url) return url;
+          }
+          return '';
         };
         const aliasesFor = value => {
           if (!value || typeof value !== 'object') return [];
           const aliases = [];
-          for (const key of ['image_ori', 'image_preview', 'image_thumb', 'image', 'url', 'src']) {
-            const url = urlFrom(value[key]);
-            if (url && !aliases.includes(url)) aliases.push(url);
+          const add = candidate => { const url = urlFrom(candidate); if (url && !aliases.includes(url)) aliases.push(url); };
+          for (const key of ['image_ori', 'image_preview', 'image_thumb', 'preview', 'thumb', 'original', 'image', 'url', 'src']) add(value[key]);
+          const meta = value.imageMeta || value.image_meta || null;
+          if (meta && typeof meta === 'object') for (const key of ['thumb', 'preview', 'original', 'image', 'url', 'src']) add(meta[key]);
+          const media = value.media;
+          if (media && typeof media === 'object') {
+            for (const key of ['image_ori', 'image_preview', 'image_thumb', 'preview', 'thumb', 'original', 'image', 'url', 'src']) add(media[key]);
+            const mediaMeta = media.imageMeta || media.image_meta || null;
+            if (mediaMeta && typeof mediaMeta === 'object') for (const key of ['thumb', 'preview', 'original', 'image', 'url', 'src']) add(mediaMeta[key]);
           }
           return aliases;
         };
@@ -156,25 +178,60 @@
         };
         const postPairs = pairs => { if (pairs.length) window.postMessage({ source: 'quickdraw-doubao-raw-v1', taskId, bridgeToken, pairs: pairs.slice(0, 80) }, location.origin); };
         const inspect = root => {
-          const pairs = [], seen = new Set(), stack = [{ value: root, parent: null }]; let visited = 0;
+          const seen = new Set(), stack = [{ value: root, parent: null }]; let visited = 0;
           while (stack.length && visited++ < 20_000) {
             const entry = stack.pop(), value = entry.value, parent = entry.parent;
-            if (typeof value === 'string' && value.length >= 2 && value.length <= 2_000_000 && /^[\s]*[\[{]/.test(value)) { try { stack.push({ value: Reflect.apply(original, JSON, [value]), parent }); } catch {} continue; }
+            if (typeof value === 'string' && value.length >= 2 && value.length <= 2_000_000 && /^[\s]*[\[{]/.test(value)) {
+              try { stack.push({ value: Reflect.apply(original, JSON, [value]), parent }); } catch {}
+              continue;
+            }
             if (!value || typeof value !== 'object' || seen.has(value)) continue;
+            try {
+              if ((typeof Node !== 'undefined' && value instanceof Node) || (typeof Window !== 'undefined' && value instanceof Window) || (typeof EventTarget !== 'undefined' && value instanceof EventTarget)) continue;
+            } catch {}
             seen.add(value);
             const creations = Array.isArray(value.creations) ? value.creations : (value.creations && typeof value.creations === 'object' ? Object.values(value.creations) : []);
             for (const item of creations.slice(0, 80)) {
               const image = item?.image || item;
-              const raw = urlFrom(image?.image_ori_raw || image?.imageOriRaw || item?.image_ori_raw || item?.imageOriRaw);
+              const raw = rawFrom(image) || rawFrom(item);
               addPair(raw, image, item);
             }
-            const directRaw = urlFrom(value.image_ori_raw || value.imageOriRaw);
+            const directRaw = rawFrom(value);
             if (directRaw) addPair(directRaw, value, parent);
-            if (Array.isArray(value)) for (const child of value) stack.push({ value: child, parent });
-            else for (const child of Object.values(value).slice(0, 240)) stack.push({ value: child, parent: value });
+            if (Array.isArray(value)) {
+              for (const child of value) stack.push({ value: child, parent });
+            } else {
+              let entries = [];
+              try { entries = Object.entries(value).slice(0, 240); } catch {}
+              for (const [key, child] of entries) {
+                if (['_owner','ref','return','child','sibling','alternate','stateNode'].includes(key)) continue;
+                stack.push({ value: child, parent: value });
+              }
+            }
           }
           const fresh = cache.filter(pair => { const key = `${pair.raw}|${pair.aliases.join('|')}|${pair.identifiers.join('|')}`; if (delivered.has(key)) return false; delivered.add(key); return true; });
           postPairs(fresh);
+        };
+        const scanReactImageState = () => {
+          const roots = [...document.querySelectorAll('[data-testid="message_image_content"],[data-testid="mdbox_image"],img[data-track-key]')].slice(-60);
+          const seenFibers = new Set();
+          for (const root of roots) {
+            for (let node = root, depth = 0; node && node !== document.body && depth < 6; node = node.parentElement, depth++) {
+              let keys = [];
+              try { keys = Object.keys(node); } catch {}
+              for (const key of keys) {
+                if (key.startsWith('__reactProps$')) { try { inspect(node[key]); } catch {} }
+                if (!key.startsWith('__reactFiber$')) continue;
+                let fiber = node[key], hops = 0;
+                while (fiber && hops++ < 24 && !seenFibers.has(fiber)) {
+                  seenFibers.add(fiber);
+                  try { inspect(fiber.memoizedProps); } catch {}
+                  try { inspect(fiber.pendingProps); } catch {}
+                  fiber = fiber.return;
+                }
+              }
+            }
+          }
         };
         function wrappedParse() { const result = Reflect.apply(original, this, arguments); try { inspect(result); } catch {} return result; }
         async function wrappedResponseJson() { const result = await Reflect.apply(originalResponseJson, this, arguments); try { inspect(result); } catch {} return result; }
@@ -183,7 +240,7 @@
         const onMessage = event => {
           if (event.source !== window || event.origin !== location.origin || event.data?.taskId !== taskId || event.data?.bridgeToken !== bridgeToken) return;
           if (event.data?.source === 'quickdraw-doubao-raw-cleanup-v1') cleanup();
-          if (event.data?.source === 'quickdraw-doubao-raw-replay-v1') postPairs(cache);
+          if (event.data?.source === 'quickdraw-doubao-raw-replay-v1') { try { scanReactImageState(); } catch {} postPairs(cache); }
         };
         JSON.parse = wrappedParse; if (originalResponseJson) Response.prototype.json = wrappedResponseJson; if (originalResponseText) Response.prototype.text = wrappedResponseText;
         window.addEventListener('message', onMessage);
@@ -191,7 +248,7 @@
         return { installed: JSON.parse === wrappedParse && (!originalResponseJson || Response.prototype.json === wrappedResponseJson), token: bridgeToken, version: VERSION };
       } });
       const confirmation = results?.[0]?.result;
-      if (!confirmation?.installed || !confirmation.token || ![2, 3].includes(confirmation.version)) throw new Error('豆包原图读取桥接未确认安装，任务未发送。');
+      if (!confirmation?.installed || !confirmation.token || confirmation.version !== 4) throw new Error('豆包原图读取桥接未确认安装，任务未发送。');
       return String(confirmation.token);
     }
     async command(task, command) {

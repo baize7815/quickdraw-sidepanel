@@ -12,7 +12,11 @@
       const url = new URL(String(value || ''), globalThis.location?.href);
       const base = `${url.origin}${url.pathname}`;
       const exact = `${base}${url.search}`;
-      return exact === base ? [base] : [exact, base];
+      const keys = exact === base ? [base] : [exact, base];
+      const host = url.hostname.toLowerCase();
+      const sourcePath = url.pathname.split('~')[0];
+      if (sourcePath && (host === 'byteimg.com' || host.endsWith('.byteimg.com'))) keys.push(`byteimg-source:${sourcePath}`);
+      return [...new Set(keys)];
     } catch { return []; }
   };
   const rawUrlKey = value => rawUrlKeys(value)[0] || '';
@@ -248,7 +252,15 @@
     return String(value || '').replace(/^\s*(?:生成图片|生成图像|生成视频|图像生成|图片生成|AI生图|生图)\s*[:：]\s*/, '');
   }
   function bubbleMatchesPrompt(actual, expected) {
-    return promptMatches(actual, expected) || promptMatches(stripBubbleModePrefix(actual), expected);
+    // Doubao can insert visual whitespace between Chinese text and a ratio
+    // such as "猫 1:1" even when the submitted editor read "猫1:1".
+    // Relax only SENT-BUBBLE matching; editor readback stays exact.
+    const normalizeBubble = value => promptSemanticText(value)
+      .replace(/([\u3400-\u9fff])\s+(?=[A-Za-z0-9])/g, '$1')
+      .replace(/([A-Za-z0-9])\s+(?=[\u3400-\u9fff])/g, '$1');
+    return promptMatches(actual, expected)
+      || promptMatches(stripBubbleModePrefix(actual), expected)
+      || normalizeBubble(stripBubbleModePrefix(actual)) === normalizeBubble(expected);
   }
 
   function inputEvent(type, value) {
@@ -849,20 +861,26 @@
   }
 
   function userMessages(expectedText = '') {
+    const expected = String(expectedText || '');
     const result = [];
     const seen = new Set();
+    const addRecord = (element, allowEmptyAttachment = false) => {
+      if (!element || !visible(element) || seen.has(element) || isComposerElement(element)) return;
+      const text = textOf(element);
+      if (!text && !allowEmptyAttachment) return;
+      if (result.some(item => item.element !== element && (item.element.contains?.(element) || element.contains?.(item.element)))) return;
+      seen.add(element);
+      result.push(recordForMessage(element, text));
+    };
     for (const candidate of queryAll([...DOUBAO_USER_SELECTORS, ...DOUBAO_MESSAGE_SELECTORS])) {
       const { element, role } = userMessageContext(candidate);
       if (!visible(element) || seen.has(element) || isComposerElement(element)) continue;
       if (role === 'assistant') continue;
       const text = textOf(element);
       const hasAttachment = !!(element.querySelector?.('img,[data-asset-id],[data-file-id],[data-image-id],[data-testid*="attachment" i]'));
-      const matchesExpected = String(expectedText || '') && text && bubbleMatchesPrompt(text, expectedText);
+      const matchesExpected = expected && text && bubbleMatchesPrompt(text, expected);
       if ((!text && !hasAttachment) || (role !== 'user' && !/任务编号\s*[:：]/.test(text) && !matchesExpected)) continue;
-      // With hashed Doubao wrappers, nested selectors can report the same
-      // user bubble several times. Keep the most specific task/message node.
-      if (result.some(item => item.element !== element && (item.element.contains?.(element) || element.contains?.(item.element)))) continue;
-      seen.add(element); result.push(recordForMessage(element, text));
+      addRecord(element, !!hasAttachment && role === 'user');
     }
     for (const candidate of allTaskTextElements('')) {
       const { element, role } = userMessageContext(candidate);
@@ -870,8 +888,40 @@
       if (!visible(element) || seen.has(element)) continue;
       const text = textOf(element);
       if (!text || !/任务编号\s*[:：]/.test(text)) continue;
-      if (result.some(item => item.element !== element && (item.element.contains?.(element) || element.contains?.(item.element)))) continue;
-      seen.add(element); result.push(recordForMessage(element, text));
+      addRecord(element);
+    }
+    // The current image-generation composer uses dynamically named bubble
+    // wrappers. Resolve a sent bubble by its exact text as a final fallback.
+    // Exclude the composer itself and interactive controls: matching the text
+    // still sitting in the editor must NEVER count as a successful send.
+    if (expected) {
+      const input = findInput();
+      const composer = input ? composerRoot(input) : null;
+      const fallback = [];
+      try {
+        for (const candidate of document.querySelectorAll?.('body *') || []) {
+          if (!visible(candidate) || seen.has(candidate)) continue;
+          if (composer && composer !== document && composer.contains?.(candidate)) continue;
+          if (candidate.closest?.('textarea,input,[contenteditable="true"],[role="textbox"],button,[role="button"]')) continue;
+          if (candidate.closest?.('[data-message-author-role="assistant"],[data-message-role="assistant"],[data-role="assistant"]')) continue;
+          const text = textOf(candidate);
+          if (!text || text.length > Math.max(512, expected.length * 4 + 64) || !bubbleMatchesPrompt(text, expected)) continue;
+          const { element, role } = userMessageContext(candidate);
+          if (role === 'assistant') continue;
+          // Context detection sometimes walks up to a chat container that
+          // also owns the editor. Do not discard a matching leaf in that case.
+          const anchored = element && visible(element) && !isComposerElement(element)
+            && !(composer && composer !== document && composer.contains?.(element))
+            && bubbleMatchesPrompt(textOf(element), expected) ? element : candidate;
+          fallback.push(anchored);
+        }
+      } catch {}
+      fallback.sort((a, b) => textOf(a).length - textOf(b).length || Number(a.children?.length || 0) - Number(b.children?.length || 0));
+      for (const element of fallback) {
+        if (seen.has(element) || result.some(item => item.element === element || item.element.contains?.(element) || element.contains?.(item.element))) continue;
+        seen.add(element);
+        result.push(recordForMessage(element, textOf(element)));
+      }
     }
     return result;
   }
@@ -1014,8 +1064,13 @@
         || (record.sawBusy && !busy && candidates.length > 0);
       const missingRaw = record.rawBridgeToken && candidates.some(item => !item.rawImageUrl);
       if (candidates.length && ended && !busy && missingRaw) {
-        if (!record.rawMissingSince) record.rawMissingSince = Date.now();
-        if (Date.now() - record.rawMissingSince >= 10_000) {
+        const now = Date.now();
+        if (!record.lastRawReplayAt || now - record.lastRawReplayAt >= 1_000) {
+          record.lastRawReplayAt = now;
+          requestRawBridgeReplay(taskId, record.rawBridgeToken);
+        }
+        if (!record.rawMissingSince) record.rawMissingSince = now;
+        if (now - record.rawMissingSince >= 10_000) {
           dispose(taskId);
           emit(taskId, 'needs-attention', { code: 'raw-image-unavailable', error: '豆包已完成图片生成，但页面没有提供可核验的原图地址。结果标签页已保留，可打开后继续读取。' });
           return;
@@ -1320,16 +1375,16 @@
         return;
       }
     }
+    const sentRequestText = String(requestText || prompt || '');
     const baseline = mode === 'image-edit' ? assistantTurns() : assistantMessages();
     const baselineHashes = baseline.map(message => message.fingerprint);
     const baselineElements = new Set(baseline.map(message => message.element));
-    const baselineUsers = userMessages();
+    const baselineUsers = userMessages(sentRequestText);
     const baselineUserElements = new Set(baselineUsers.map(message => message.element));
     const baselineUserHashes = new Set(baselineUsers.map(message => message.fingerprint));
     const baselineTurnFingerprints = new Map(baseline.map(message => [message.element, message.fingerprint]));
     const baselineUserKeys = new Set(baselineUsers.map(message => message.messageId).filter(Boolean));
-    const sentRequestText = String(requestText || prompt || '');
-    const record = { taskId, mode, stage: 'sending', phaseEvents: true, rawBridgeToken: String(rawBridgeToken || ''), requestText: sentRequestText, requestMessageId: '', allowLegacyMarker: false, baselineHashes, baselineElements, baselineTurnFingerprints, baselineUserElements, baselineUserHashes, baselineUserKeys, observer: null, timeout: null, pollTimer: null, stabilityTimer: null, sawBusy: false, lastImageKey: '', lastImageChangedAt: 0 };
+    const record = { taskId, mode, stage: 'sending', phaseEvents: true, rawBridgeToken: String(rawBridgeToken || ''), requestText: sentRequestText, requestMessageId: '', allowLegacyMarker: false, baselineHashes, baselineElements, baselineTurnFingerprints, baselineUserElements, baselineUserHashes, baselineUserKeys, observer: null, timeout: null, pollTimer: null, stabilityTimer: null, sawBusy: false, lastImageKey: '', lastImageChangedAt: 0, lastRawReplayAt: 0 };
     active.set(taskId, record);
     requestRawBridgeReplay(taskId, record.rawBridgeToken);
     emit(taskId, 'ready');
@@ -1391,7 +1446,7 @@
     if (active.has(taskId)) return;
     if (active.size) throw new Error('无法确认原请求，未自动重发。');
     if (stage !== 'sending' && !requestFingerprint) throw new Error('无法确认原请求，未自动重发。');
-    const record = { taskId, mode, phaseEvents: true, stage, rawBridgeToken: String(rawBridgeToken || ''), requestText: String(requestText || ''), requestMessageId: String(requestMessageId || ''), allowLegacyMarker: true, requestFingerprint: String(requestFingerprint || ''), deadlineAt, baselineHashes: Array.isArray(baselineHashes) ? baselineHashes : [], baselineElements: new Set(), baselineUserElements: null, baselineUserKeys: null, observer: null, timeout: null, pollTimer: null, stabilityTimer: null, sawBusy: false, lastImageKey: '', lastImageChangedAt: 0 };
+    const record = { taskId, mode, phaseEvents: true, stage, rawBridgeToken: String(rawBridgeToken || ''), requestText: String(requestText || ''), requestMessageId: String(requestMessageId || ''), allowLegacyMarker: true, requestFingerprint: String(requestFingerprint || ''), deadlineAt, baselineHashes: Array.isArray(baselineHashes) ? baselineHashes : [], baselineElements: new Set(), baselineUserElements: null, baselineUserKeys: null, observer: null, timeout: null, pollTimer: null, stabilityTimer: null, sawBusy: false, lastImageKey: '', lastImageChangedAt: 0, lastRawReplayAt: 0 };
     active.set(taskId, record);
     requestRawBridgeReplay(taskId, record.rawBridgeToken);
     emit(taskId, 'resumed');
