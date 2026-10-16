@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Quickdraw 图片局部编辑工作台</title><link rel="stylesheet" href="ai-visual-editor.css"></head>
+<body>
+<header><div><strong>Quickdraw · AI 图片编辑工作台</strong><small>本地标注、编辑点、物体/场景融合</small></div><span id="size-label">读取原图中…</span></header>
+<main>
+<section class="canvas-side">
+ <section id="material-bar" class="material-bar" aria-label="图片素材和主图选择"></section>
+ <nav class="modes" aria-label="编辑模式"><button type="button" data-mode="mask" class="active">自由蒙版</button><button type="button" data-mode="point">编辑点</button><button type="button" data-mode="fusion">物体 / 场景融合</button></nav>
+ <div id="stage" class="stage"><div id="surface" class="surface"><canvas id="image" aria-label="原图"></canvas><canvas id="overlay" aria-label="图像标注画布" tabindex="0"></canvas></div></div>
+ <div class="tool-row"><span id="tool-help">在图片上涂抹需要修改的区域</span><button type="button" id="undo">撤销</button><button type="button" id="redo">重做</button><button type="button" id="clear">清除当前模式标记</button></div>
+</section>
+<aside>
+ <div class="panel compact-mask" id="mask-controls" aria-label="蒙版工具">
+  <div class="mask-toolbar"><strong>蒙版</strong><div class="tool-row mask-brush-tools"><button type="button" id="brush" class="active">画笔</button><button type="button" id="eraser">擦除</button></div><label class="check mask-invert"><input type="checkbox" id="invert">反选</label></div>
+  <div class="mask-sliders"><label class="mask-range">画笔 <output id="brush-size-value">36</output><input id="brush-size" type="range" min="2" max="250" value="36" aria-label="画笔尺寸（原图像素）"></label><label class="mask-range">羽化 <output id="feather-value">0</output><input id="feather" type="range" min="0" max="40" value="0" aria-label="羽化范围（原图像素）"></label></div>
+ </div>
+ <div class="panel" id="point-controls" hidden><h2>编辑点</h2><p class="hint">点击主图标记头、手等任意位置。每个点属于同一主图，支持 @点1、@图2 引用。单个点是坐标锚点，不是整块蒙版。</p><div id="point-list"></div></div>
+ <div class="panel" id="fusion-controls" hidden><h2>参考素材融合</h2><label for="reference-file">参考图片（PNG / JPG / WebP）</label><input type="file" id="reference-file" accept="image/png,image/jpeg,image/webp"><img id="reference-preview" alt="参考图预览" hidden><button id="reference-clear" type="button" hidden>移除参考图</button></div>
+ <div class="panel"><h2>编辑意图</h2><label for="request">描述变化，输入 @ 可引用点位和图片</label><textarea id="request" rows="5" maxlength="3000" placeholder="例如：将选中的椅子改成深棕色真皮材质，保持原有透视与室内灯光。"></textarea>
+ <button type="button" id="generate-prompt" hidden>生成 / 更新提示词</button><textarea id="prompt-output" hidden readonly aria-hidden="true"></textarea>
+ <button type="button" id="copy-prompt" hidden>复制提示词</button></div>
+ <div class="panel" id="visual-send-panel"><h2>发送图片编辑任务</h2><select id="visual-provider" aria-label="图片服务"><option value="gpt">GPT</option><option value="doubao">豆包</option><option value="grok">Grok</option><option value="gemini">Gemini</option></select><button id="visual-send" type="button" class="primary">发送图片与提示词</button></div>
+ <div class="panel" id="visual-export-panel"><h2>备用：素材导出</h2><p class="hint">顺序：图 1 原图，图 2 标注图，图 3 参考图（仅融合）。灰度蒙版单独导出。请核对发送前的附件顺序。</p>
+ <div class="export-buttons"><button type="button" id="export-package" class="primary">导出完整编辑包</button><button type="button" id="export-guide">导出标注图</button><button type="button" id="export-mask">导出灰度蒙版</button></div></div>
+ <div class="panel" id="visual-manual-panel"><h2>备用：手动导入</h2><p class="hint">从允许使用的图像工具取得生成图后，可在此导入。蒙版模式可进行本地合成，严格保留未编辑区域的原图像素。</p>
+ <input id="result-file" type="file" accept="image/png,image/jpeg,image/webp"><div class="export-buttons"><button type="button" id="export-result">下载处理结果</button><button type="button" id="return-board" class="secondary">插回 Quickdraw</button></div></div>
+ <div id="mention-menu" role="listbox" hidden></div>
+ <p id="status" role="status" aria-live="polite">准备就绪</p>
+</aside>
+</main>
+<script src="core-utils.js"></script><script src="storage.js"></script><script src="ai-visual-core.js"></script><script src="ai-protocol.js"></script><script src="ai-visual-mentions.js"></script><script src="ai-visual-editor.js"></script>
+</body></html>

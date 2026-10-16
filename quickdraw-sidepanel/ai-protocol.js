@@ -23,6 +23,7 @@
   const DOUBAO_IMAGE_ORIGINS = Object.freeze(['https://*.doubao.com/*', 'https://*.byteimg.com/*']);
   const GROK_ORIGINS = Object.freeze(['https://grok.com/*']);
   const GROK_AUTH_ORIGINS = Object.freeze(['https://accounts.x.ai/*']);
+  const GEMINI_ORIGINS = Object.freeze(['https://gemini.google.com/*']);
   const STAGES = Object.freeze({
     queued: Object.freeze({ timeout: 30_000, order: 0 }),
     'page-loading': Object.freeze({ timeout: 120_000, order: 1 }),
@@ -63,6 +64,12 @@
       authOrigins: GROK_AUTH_ORIGINS,
       imageOrigins: Object.freeze([]),
       maxInputImages: MAX_INPUT_IMAGES
+    }),
+    gemini: Object.freeze({
+      id: 'gemini', label: 'Gemini', enabled: true,
+      capabilities: Object.freeze({ text: false, mermaid: false, image: true }),
+      origins: GEMINI_ORIGINS,
+      authOrigins: Object.freeze([]), imageOrigins: Object.freeze([]), maxInputImages: 5
     }),
     deepseek: Object.freeze({
       id: 'deepseek',
@@ -548,11 +555,14 @@
     if (!input.boardId || !input.sourceInstanceId) throw new Error('缺少画板任务归属信息。');
     const inputAssets = normalizeInputAssets(input, kind);
     if (kind === 'image-edit' && !inputAssets.length && !prompt) throw new Error('请输入 AI 图片生成需求。');
-    if (kind === 'image-edit' && inputAssets.length > MAX_INPUT_IMAGES) throw new Error(`一次最多处理 ${MAX_INPUT_IMAGES} 张图片。`);
+    // Visual editing adds one spatial guide to up to four selected sources.
+    const imageLimit = input.visualEdit === true ? 5 : MAX_INPUT_IMAGES;
+    if (kind === 'image-edit' && inputAssets.length > imageLimit) throw new Error(`一次最多处理 ${imageLimit} 张图片。`);
     return {
       taskId: String(input.taskId || randomId('task')),
       provider: p.id,
       kind,
+      visualEdit: kind === 'image-edit' && input.visualEdit === true,
       boardId: String(input.boardId),
       sourceWindowId: Number.isInteger(input.sourceWindowId) ? input.sourceWindowId : null,
       sourceInstanceId: String(input.sourceInstanceId),
@@ -643,6 +653,7 @@
     DOUBAO_IMAGE_ORIGINS,
     GROK_ORIGINS,
     GROK_AUTH_ORIGINS,
+    GEMINI_ORIGINS,
     PROVIDERS,
     DIAGRAM_TYPES,
     ACTIVE_STATUSES,

@@ -1,6 +1,6 @@
 'use strict';
 
-importScripts('core-utils.js', 'storage.js', 'ai-image-utils.js', 'ai-protocol.js', 'ai-task-store.js', 'ai-gpt-provider.js', 'ai-doubao-provider.js', 'ai-grok-provider.js', 'ai-router.js');
+importScripts('core-utils.js', 'storage.js', 'ai-image-utils.js', 'ai-protocol.js', 'ai-task-store.js', 'ai-gpt-provider.js', 'ai-doubao-provider.js', 'ai-grok-provider.js', 'ai-gemini-provider.js', 'ai-router.js');
 
 const assetStore = new QuickdrawStorage();
 const aiRouter = globalThis.QuickdrawAIRouter ? new QuickdrawAIRouter({ assetStore }) : null;
@@ -43,6 +43,29 @@ async function deliver(windowId, payload) {
   await chrome.storage.session.set({ [key]: { ...payload, id: crypto.randomUUID(), createdAt: Date.now() } });
   if (windowId != null) await chrome.sidePanel.open({ windowId });
 }
+
+// Return a locally composited image to Quickdraw. This does not invoke any remote AI service.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== 'qd-visual-editor-import') return false;
+  (async () => {
+    if (sender.id !== chrome.runtime.id || !/^a[\w-]{1,150}$/.test(String(message.assetId || ''))) throw new Error('无效的编辑器回填请求。');
+    const record = await assetStore.getAsset(message.assetId);
+    if (!record?.blob || !String(record.type || '').startsWith('image/')) throw new Error('图片资源不存在。');
+    const windowId = Number.isInteger(message.windowId) && message.windowId >= 0 ? message.windowId : (sender.tab?.windowId ?? null);
+    try {
+      await deliver(windowId, { kind:'asset', assetId:message.assetId, sourceUrl:'quickdraw-visual-edit' });
+      return { ok:true };
+    } catch (error) {
+      // Some browsers require a direct gesture to reopen the side panel. The
+      // session-stored asset remains available when Quickdraw opens manually.
+      const key = 'quickdraw_pending_capture:' + (windowId ?? 'default');
+      const pending = await chrome.storage.session.get(key);
+      if (pending?.[key]?.assetId === message.assetId) return { ok:true, needsOpen:true };
+      throw error;
+    }
+  })().then(sendResponse).catch(error => sendResponse({ok:false,error:String(error?.message||error)}));
+  return true;
+});
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const windowId = tab?.windowId;

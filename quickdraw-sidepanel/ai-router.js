@@ -26,6 +26,7 @@
       this.providers = { gpt: new globalThis.QuickdrawGPTProvider(this.assetStore) };
       if (globalThis.QuickdrawDoubaoProvider) this.providers.doubao = new globalThis.QuickdrawDoubaoProvider(this.assetStore);
       if (globalThis.QuickdrawGrokProvider) this.providers.grok = new globalThis.QuickdrawGrokProvider(this.assetStore);
+      if (globalThis.QuickdrawGeminiProvider) this.providers.gemini = new globalThis.QuickdrawGeminiProvider(this.assetStore);
       this.operationQueue = Promise.resolve();
       this.restorePassiveTaskIds = new Set();
       // In-memory setTimeout timers are lost when the MV3 service worker is

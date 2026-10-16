@@ -572,6 +572,7 @@
       const cropButton=$('#btn-crop'),removeBgButton=$('#btn-remove-bg'),watermarkButton=$('#btn-remove-watermark'),cropDivider=$('#crop-divider');
       const aiEditButton=$('#btn-ai-edit');
       if(aiEditButton)aiEditButton.disabled=this.backgroundRemovalInProgress||this.watermarkRemovalInProgress;
+      const visualButton=$('#btn-ai-visual-edit');if(visualButton)visualButton.disabled=!selected.length||!selected.every(el=>el.type==='image')||selected.length>4||this.backgroundRemovalInProgress||this.watermarkRemovalInProgress;
       if(cropButton){cropButton.hidden=!canEditOneImage;cropButton.disabled=this.backgroundRemovalInProgress||this.watermarkRemovalInProgress;cropButton.classList.toggle('active',canEditOneImage&&this.cropTarget===selected[0]);}
       if(removeBgButton){removeBgButton.hidden=!canRemoveBackground;removeBgButton.disabled=this.backgroundRemovalInProgress||this.watermarkRemovalInProgress;removeBgButton.classList.toggle('processing',this.backgroundRemovalInProgress);}
       if(watermarkButton){watermarkButton.hidden=!canEditOneImage;watermarkButton.disabled=this.backgroundRemovalInProgress||this.watermarkRemovalInProgress;watermarkButton.classList.toggle('active',canEditOneImage&&this.watermarkTarget===selected[0]);watermarkButton.classList.toggle('processing',this.watermarkRemovalInProgress);}
@@ -2591,6 +2592,10 @@
       $('#btn-mermaid').addEventListener('click',e=>{e.stopPropagation();this.openMermaidDialog();});
       $('#btn-ai-mindmap').addEventListener('click',e=>{e.stopPropagation();this.openAIMindmapDialog();});
       $('#btn-ai-edit')?.addEventListener('click',e=>{e.stopPropagation();this.openAIImageDialog();});
+      $('#btn-ai-visual-edit')?.addEventListener('click',e=>{e.stopPropagation();this.openVisualImageEditor();});
+      $('#qd-visual-close')?.addEventListener('click',()=>this.closeVisualImageEditor());
+      $('#qd-visual-dialog')?.addEventListener('pointerdown',e=>{if(e.target===$('#qd-visual-dialog'))this.closeVisualImageEditor();});
+      window.addEventListener('message',event=>this.receiveVisualEditorMessage(event));
       $('#mermaid-cancel').addEventListener('click',()=>this.closeMermaidDialog());
       $('#mermaid-generate').addEventListener('click',()=>this.generateMermaidFromInput());
       $('#mermaid-dialog').addEventListener('pointerdown',e=>{if(e.target===$('#mermaid-dialog'))this.closeMermaidDialog();});
@@ -2777,7 +2782,7 @@ $('#size-number')?.addEventListener('change',e=>applySizeValue(e.target.value,tr
 
     setAIProvider(value){
       const selected=globalThis.QuickdrawAI?.provider(value);
-      if(!selected?.enabled){this.aiProvider='gpt';this.toast('当前平台未接入，请选择 GPT、豆包或 Grok。');}
+      if(!selected?.enabled){this.aiProvider='gpt';this.toast('当前平台未接入，请选择 GPT、豆包、Grok 或 Gemini。');}
       else this.aiProvider=selected.id;
       this.syncAIProviderUI();
       this.syncAIModeUI?.();
@@ -2865,7 +2870,7 @@ $('#size-number')?.addEventListener('change',e=>applySizeValue(e.target.value,tr
       for(const task of tasks){
         const row=document.createElement('div');row.className='ai-task-row';
         const receipt=this.aiTaskReceipts.get(task.taskId);
-        const taskLabel=task.prompt||(task.kind==='image-edit'?'图片编辑':'AI 任务');
+        const taskLabel=task.visualEdit===true?'AI 局部编辑 · 原图＋定位标注图'+(task.inputAssets?.length>2?`＋${task.inputAssets.length-2} 张参考图`:''):task.prompt||(task.kind==='image-edit'?'AI 图片编辑 / 生图':'AI 任务');
         const text=document.createElement('span');text.className='ai-task-row-text';text.textContent=taskLabel;text.title=task.error?`${taskLabel}\n${task.error}`:taskLabel;
         const status=document.createElement('span');status.className='ai-task-row-status';status.textContent=receipt&&task.status!=='imported'?'已写入待确认':this.aiTaskStatusLabel(task.status,task);
         row.append(text,status);
@@ -2886,7 +2891,8 @@ $('#size-number')?.addEventListener('change',e=>applySizeValue(e.target.value,tr
       const dialog=$('#ai-mindmap-dialog');if(!dialog)return;
       this.aiCurrentTaskId=null;
       this.aiDialogMode='mindmap';this.aiImageSelection=null;dialog.hidden=false;this.syncAIProviderUI();this.syncAIModeUI();this.refreshAITasks();
-      const input=$('#ai-mindmap-input');if(input&&!showPending){input.value='';}
+      const input=$('#ai-mindmap-input');if(input){input.hidden=false;if(!showPending)input.value='';}
+      const submit=$('#ai-mindmap-submit');if(submit)submit.hidden=false;
       this.hideAITaskError();
       const status=$('#ai-task-status');if(status)status.textContent=showPending?'待导入结果':'准备就绪';this.syncAITaskControls();
       if(showPending)$('#ai-task-list')?.scrollTo?.({top:0});else this.focusTextInput(input);
@@ -2930,13 +2936,98 @@ $('#size-number')?.addEventListener('change',e=>applySizeValue(e.target.value,tr
       return units;
     }
 
+    async openVisualImageEditor(){
+      const selection=this.getSelectedElements();
+      if(!selection.length||selection.some(el=>el.type!=='image')){
+        this.toast('请先选中至少一张图片，不能混入文字或形状。');return;
+      }
+      if(selection.length>4){this.toast('局部编辑最多选择 4 张图片，主图加最多 3 张参考图。');return;}
+      if(this.boardLoading||!this.currentFileId){this.toast('画板正在加载，请稍后再试。');return;}
+      try{
+        const sources=[];
+        for(const element of selection){
+          const record=await this.store.getAsset(element.assetId);
+          if(!record?.blob)throw new Error('有选中图片的资源不存在，请重新选取。');
+          sources.push({id:element.id,assetId:element.assetId});
+        }
+        const modal=$('#qd-visual-dialog'),frame=$('#qd-visual-frame');
+        if(!modal||!frame)throw new Error('没有找到图片编辑弹窗。');
+        this.visualEditContext={boardId:this.currentFileId,epoch:this.aiBoardEpoch,sources};
+        const params=new URLSearchParams({embedded:'1',assets:sources.map(source=>source.assetId).join(',')});
+        frame.src=chrome.runtime.getURL('ai-visual-editor.html')+'?'+params;
+        this.closePopovers();modal.hidden=false;
+      }catch(error){console.error('Quickdraw visual editor',error);this.toast(error?.message||'无法读取选中的图片。');}
+    }
+
+    closeVisualImageEditor(){
+      const modal=$('#qd-visual-dialog'),frame=$('#qd-visual-frame');
+      if(modal)modal.hidden=true;
+      if(frame)frame.removeAttribute('src');
+      this.visualEditContext=null;
+    }
+
+    async receiveVisualEditorMessage(event){
+      const frame=$('#qd-visual-frame'),context=this.visualEditContext;
+      if(!context||event.origin!==location.origin||event.source!==frame?.contentWindow)return;
+      const message=event.data;
+      if(!message||typeof message!=='object')return;
+      if(message.type==='qd-visual-close'){this.closeVisualImageEditor();return;}
+      if(message.type!=='qd-visual-submit')return;
+      const fail=error=>{try{frame.contentWindow.postMessage({type:'qd-visual-response',ok:false,error:String(error?.message||error)},location.origin);}catch{}};
+      try{
+        if(this.aiSubmitBusy)throw new Error('正在发送上一项任务。');
+        if(context.boardId!==this.currentFileId||context.epoch!==this.aiBoardEpoch)throw new Error('画板已经切换，请重新选择图片。');
+        const provider=globalThis.QuickdrawAI?.provider(message.provider);
+        if(!provider?.enabled||!provider.capabilities?.image)throw new Error('当前图片服务不可用。');
+        const main=context.sources.find(source=>source.assetId===message.mainAssetId);
+        if(!main||!this.elements.some(el=>el.id===main.id&&el.assetId===main.assetId))throw new Error('主图已经变化，请重新打开编辑器。');
+        const imageIds=Array.isArray(message.inputAssetIds)?message.inputAssetIds:[];
+        if(imageIds.length<2||imageIds.length>5||imageIds[0]!==main.assetId||imageIds[1]!==message.guideAssetId||new Set(imageIds).size!==imageIds.length||imageIds.some(id=>typeof id!=='string'||!/^[\w-]{2,150}$/.test(id)))throw new Error('发送素材无效，请重新制作。');
+        const guideRecord=await this.store.getAsset(message.guideAssetId);
+        if(!guideRecord?.blob||guideRecord.visualEditorGuide!==true||guideRecord.visualSource!==main.assetId)throw new Error('标注图与主图不匹配。');
+        for(const id of imageIds.slice(2)){
+          const source=context.sources.find(item=>item.assetId===id);
+          const extra=source?null:await this.store.getAsset(id);
+          if(!source && (!extra?.blob||extra.visualEditorReference!==true))throw new Error('参考图来源无效。');
+          if(source && !this.elements.some(el=>el.id===source.id&&el.assetId===source.assetId))throw new Error('有参考图片已从画板移除。');
+        }
+        const prompt=String(message.prompt||'').trim();
+        if(!prompt||prompt.length>4000)throw new Error('编辑提示词为空或过长。');
+        const origins=[...(provider.origins||[]),...(provider.authOrigins||[])];
+        if(chrome.permissions?.contains&&!(await chrome.permissions.contains({origins})))throw new Error('未获得目标网站权限，请在编辑器发送按钮上重新授权。');
+        this.aiSubmitBusy=true;
+        const target=this.elements.find(el=>el.id===main.id);
+        const sourceBounds=this.getElementsBBox([target]);
+        // AI cleanup deletes task inputs. Never hand it the board's source asset IDs.
+        const stagedIds=await globalThis.QuickdrawVisualTransfer.stage(this.store,imageIds,blob=>globalThis.QuickdrawAIImage.inspectBlob(blob,{maxBytes:globalThis.QuickdrawAIImage.MAX_INPUT_BYTES}));
+        let response;
+        try{response=await chrome.runtime.sendMessage({type:'qd-ai-submit',payload:{
+          provider:provider.id,kind:'image-edit',visualEdit:true,prompt,boardId:context.boardId,
+          sourceWindowId:this.windowId,sourceInstanceId:this.instanceId,sourceBoardEpoch:context.epoch,
+          sourceRevision:this.documentRevision,
+          inputAssetId:stagedIds[0],inputAssetIds:stagedIds,
+          inputAssets:stagedIds.map((assetId,order)=>({assetId,order,sourceElementIds:order===0?[main.id]:[]})),
+          sourceElementIds:[main.id],sourceInputUnits:[[main.id]],sourceBounds
+        }});}catch(error){throw new Error('图片任务发送状态不确定，请先查看任务列表，暂勿重复发送。',{cause:error});}
+        if(!response?.ok){await globalThis.QuickdrawVisualTransfer.cleanup(this.store,stagedIds);throw new Error(response?.error||'图片编辑任务提交失败。');}
+        // The task now owns staged assets. Its cleanup will not touch the original picture.
+        this.store.deleteAsset?.(message.guideAssetId).catch?.(()=>{});
+        this.aiCurrentTaskId=response.taskId;
+        this.aiProgressTask={taskId:response.taskId,provider:provider.id,kind:'image-edit',visualEdit:true,prompt,status:'queued',stage:'queued',inputAssets:stagedIds.map(assetId=>({assetId}))};
+        this.closeVisualImageEditor();
+        this.renderAIProgress();this.refreshAITasks().catch(()=>{});
+        this.toast('图片与标注已提交到 '+provider.label+'，结果将自动返回画板。');
+      }catch(error){console.error('Quickdraw visual submit',error);fail(error);}
+      finally{this.aiSubmitBusy=false;}
+    }
+
     openAIImageDialog(){
       const selected=this.getSelectedElements();
       const units=selected.length?this.getAIImageInputUnits(selected):[];
       if(selected.length&&!units.length){this.toast('当前选择没有可导出的对象。');return;}
       this.closePopovers();this.aiDialogMode='image-edit';this.aiImageSelection={refs:[...selected],ids:selected.map(el=>el.id),units,bounds:units.length?this.getElementsBBox(units.flatMap(unit=>unit.items)):null,sourceInputUnits:units.map(unit=>unit.ids)};
       const dialog=$('#ai-mindmap-dialog');if(!dialog)return;dialog.hidden=false;this.syncAIProviderUI();this.syncAIModeUI();this.refreshAITasks();this.hideAITaskError();
-      const input=$('#ai-mindmap-input');if(input)input.value='';this.resetAIImagePresetUI();const status=$('#ai-task-status');if(status)status.textContent='准备就绪';this.syncAITaskControls();this.focusTextInput(input);
+      const input=$('#ai-mindmap-input');if(input){input.value='';input.hidden=false;}const submit=$('#ai-mindmap-submit');if(submit)submit.hidden=false;this.resetAIImagePresetUI();const status=$('#ai-task-status');if(status)status.textContent='准备就绪';this.syncAITaskControls();this.focusTextInput(input);
     }
 
     closeAIMindmapDialog(){
@@ -2966,8 +3057,8 @@ $('#size-number')?.addEventListener('change',e=>applySizeValue(e.target.value,tr
       const provider=globalThis.QuickdrawAI?.provider(task.provider||this.aiProvider),label=provider?.label||'AI';
       const active=!!globalThis.QuickdrawAI?.isActiveTask(task),stage=this.aiTaskStatusLabel(task.status,task);
       const heading=$('#ai-task-flyout-provider'),stageNode=$('#ai-task-flyout-stage'),text=$('#ai-task-flyout-text'),card=$('.ai-task-flyout-card',root),cancel=$('#ai-task-flyout-cancel'),reedit=$('#ai-task-flyout-reedit'),dismiss=$('#ai-task-flyout-dismiss');
-      if(heading)heading.textContent=label;if(stageNode)stageNode.textContent=stage;
-      if(text)text.textContent=task.error||task.prompt||(task.kind==='image-edit'?'图片编辑':'AI 任务');
+      if(heading)heading.textContent=task.visualEdit===true?`${label} · AI 局部编辑`:label;if(stageNode)stageNode.textContent=stage;
+      if(text)text.textContent=task.error||(task.visualEdit===true?`正在处理主图与定位图${task.inputAssets?.length>2?'及参考图':''}；详细编辑指令已在后台拼接。`:task.prompt||(task.kind==='image-edit'?'图片编辑':'AI 任务'));
       if(card)card.dataset.active=active?'true':'false';
       if(cancel){cancel.hidden=!active;cancel.disabled=!active;}
       if(reedit)reedit.hidden=!['failed','needs-attention'].includes(task.status);
@@ -2999,9 +3090,12 @@ $('#size-number')?.addEventListener('change',e=>applySizeValue(e.target.value,tr
       const task=this.aiProgressTask;if(!task)return;
       const dialog=$('#ai-mindmap-dialog');if(!dialog)return;
       this.closePopovers();this.aiCurrentTaskId=task.taskId;this.aiDialogMode=task.kind==='image-edit'?'image-edit':'mindmap';this.aiImageSelection=null;
+      // Detail view must reflect the task's provider, not the last platform picked.
+      if(task.provider&&globalThis.QuickdrawAI?.provider(task.provider)?.enabled)this.aiProvider=task.provider;
       if(task.kind!=='image-edit')this.aiDiagramType=globalThis.QuickdrawAI?.normalizeDiagramType?.(task.diagramType)||'flowchart';
       dialog.hidden=false;this.syncAIProviderUI();this.syncAIModeUI();
-      this.resetAIImagePresetUI();const input=$('#ai-mindmap-input');if(input)input.value=task.prompt||'';
+      this.resetAIImagePresetUI();const input=$('#ai-mindmap-input');if(input){input.value=task.visualEdit===true?'':task.prompt||'';input.hidden=task.visualEdit===true;}
+      const submit=$('#ai-mindmap-submit');if(submit)submit.hidden=task.visualEdit===true;
       if(task.error)this.showAITaskError(task.error);else this.hideAITaskError();
       const status=$('#ai-task-status');if(status)status.textContent=this.aiTaskStatusLabel(task.status,task);
       this.syncAITaskControls();
@@ -3013,7 +3107,7 @@ $('#size-number')?.addEventListener('change',e=>applySizeValue(e.target.value,tr
       this.aiProgressTask=null;this.aiCurrentTaskId=null;
       if(task.kind==='image-edit'){
         const source=(task.boardId===this.currentFileId?(task.sourceElementIds||[]).map(id=>this.elements.find(el=>el.id===id)).filter(Boolean):[]);
-        if(source.length){this.setSelection(source,false);this.openAIImageDialog();const input=$('#ai-mindmap-input');if(input)input.value=task.prompt||'';return;}
+        if(source.length){this.setSelection(source,false);if(task.visualEdit===true){this.openVisualImageEditor().catch(error=>this.toast(String(error?.message||error)));return;}this.openAIImageDialog();const input=$('#ai-mindmap-input');if(input)input.value=task.prompt||'';return;}
         this.openAIMindmapDialog();this.showAITaskError('请重新选择图片对象后再开始图片编辑。');return;
       }
       this.aiDiagramType=globalThis.QuickdrawAI?.normalizeDiagramType?.(task.diagramType)||'flowchart';

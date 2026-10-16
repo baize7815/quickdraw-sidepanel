@@ -12,7 +12,7 @@ Chrome 116+ · Manifest V3 · 原生 JavaScript · 本地优先 · 无须构建
 
 [![MIT License](https://img.shields.io/badge/License-MIT-4263EB)](LICENSE) · [English](README_EN.md) · [详细中文手册](README.zh-CN.md)
 
-**[⬇ 下载最新版 v3.9.5](https://github.com/baize7815/quickdraw-sidepanel/releases/latest)** · **[▶ B 站 2 分多钟上手视频](https://www.bilibili.com/video/BV1UkYg6FEEG/)** · **[⭐ Star](https://github.com/baize7815/quickdraw-sidepanel)**
+**[⬇ 下载最新版 v3.9.6](https://github.com/baize7815/quickdraw-sidepanel/releases/latest)** · **[▶ B 站 2 分多钟上手视频](https://www.bilibili.com/video/BV1UkYg6FEEG/)** · **[⭐ Star](https://github.com/baize7815/quickdraw-sidepanel)**
 
 [看实际效果](#先看实际效果) · [能做什么](#能做什么) · [三分钟装好](#三分钟装好) · [动手体验](#动手体验) · [作者](#关于作者)
 
@@ -107,9 +107,9 @@ Quickdraw 不打算替代完整的 Photoshop 或 Figma；更适合把“看网�
 
 ## 三分钟装好
 
-**最新版：[v3.9.5](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.9.5)**。这一版重点修复豆包 AI 生图、改图完成后回传画布的问题，并改进原图识别与发送确认。
+**最新版：[v3.9.6](https://github.com/baize7815/quickdraw-sidepanel/releases/tag/v3.9.6)**。这一版新增侧边栏内 AI 局部编辑、多图标记和 @坐标引用，接入 Gemini 网页对话任务，并优化图片回图识别与标签页保留。
 
-1. 下载 **[Quickdraw v3.9.5 ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.9.5/quickdraw-sidepanel-v3.9.5.zip)**，解压。
+1. 下载 **[Quickdraw v3.9.6 ZIP](https://github.com/baize7815/quickdraw-sidepanel/releases/download/v3.9.6/quickdraw-sidepanel-v3.9.6.zip)**，解压。
 2. 在桌面版 Chrome 打开 `chrome://extensions/`，开启右上角 **开发者模式**。
 3. 点击 **加载已解压的扩展程序**，选择解压目录中**直接包含 `manifest.json` 的文件夹**。
 4. 点击工具栏中的 **Quickdraw 侧边栏画板** 扩展图标，开始画图。

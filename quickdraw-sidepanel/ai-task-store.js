@@ -20,12 +20,14 @@
     if (!task || typeof task !== 'object') return null;
     const copy = { ...task };
     copy.prompt = AI.limitText(copy.prompt, AI.MAX_PROMPT_LENGTH);
+    copy.visualEdit = copy.kind === 'image-edit' && copy.visualEdit === true;
     copy.diagramType = copy.kind === 'image-edit' ? '' : (AI.normalizeDiagramType?.(copy.diagramType) || 'flowchart');
     copy.rawReply = AI.limitText(copy.rawReply, AI.MAX_REPLY_LENGTH);
     copy.validatedMermaid = AI.limitText(copy.validatedMermaid, AI.MAX_REPLY_LENGTH);
     copy.inputAssetId = String(copy.inputAssetId || '').slice(0, 200);
     const rawInputAssets = Array.isArray(copy.inputAssets) ? copy.inputAssets : (Array.isArray(copy.inputAssetIds) ? copy.inputAssetIds.map((assetId, order) => ({ assetId, order })) : (copy.inputAssetId ? [{ assetId: copy.inputAssetId, order: 0 }] : []));
-    copy.inputAssets = rawInputAssets.slice(0, AI.MAX_INPUT_IMAGES || 4).map((item, order) => ({
+    // Visual edits include one additional annotated location guide.
+    copy.inputAssets = rawInputAssets.slice(0, copy.visualEdit ? 5 : (AI.MAX_INPUT_IMAGES || 4)).map((item, order) => ({
       assetId: String(item?.assetId || item?.id || '').slice(0, 200),
       order: Number.isFinite(item?.order) ? Number(item.order) : order,
       sourceElementIds: Array.isArray(item?.sourceElementIds) ? item.sourceElementIds.slice(0, 80).map(String) : []

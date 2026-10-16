@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
   <title>Quickdraw 侧边栏画板</title>
   <link rel="stylesheet" href="sidepanel.css" />
+  <link rel="stylesheet" href="ai-visual-modal.css" />
 </head>
 <body>
   <div id="app" class="qd-app" data-theme="light">
@@ -77,6 +78,9 @@
       </button>
       <button id="btn-ai-edit" class="icon-btn selection-action ai-mindmap-action" title="AI 图片编辑 / 文生图" aria-label="AI 图片编辑 / 文生图">
         <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5z"/><circle cx="9" cy="9" r="1.5"/><path d="m5 17 4.5-4.5 3 3 2.2-2.2L20 18"/></svg>
+      </button>
+      <button id="btn-ai-visual-edit" class="icon-btn selection-action ai-mindmap-action" title="AI 局部图片编辑（选中 1～4 张图片，主图和参考图）" aria-label="AI 局部图片编辑工作台" disabled>
+        <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M7 14c3-5 6 5 10-4"/><circle cx="17" cy="7" r="2"/></svg>
       </button>
     </aside>
     <div id="opacity-popover" class="popover opacity-popover" hidden role="dialog" aria-label="不透明度">
@@ -259,7 +263,7 @@
       <div class="ai-dialog">
         <div class="ai-dialog-title" id="ai-mindmap-dialog-title">AI 脑图</div>
         <div class="ai-provider-row">
-          <div class="ai-provider-field"><label for="ai-task-provider">AI平台</label><select id="ai-task-provider" class="provider-select"><option value="gpt">GPT</option><option value="doubao">豆包</option><option value="grok">Grok</option></select></div>
+          <div class="ai-provider-field"><label for="ai-task-provider">AI平台</label><select id="ai-task-provider" class="provider-select"><option value="gpt">GPT</option><option value="doubao">豆包</option><option value="grok">Grok</option><option value="gemini">Gemini</option></select></div>
           <div id="ai-diagram-preset-field" class="ai-provider-field"><label for="ai-diagram-preset">图表预设</label><select id="ai-diagram-preset" class="provider-select" aria-label="Mermaid 图表预设"><option value="flowchart">Flowchart 流程图</option><option value="sequence">Sequence Diagram 时序图</option><option value="state">State Diagram 状态图</option><option value="gantt">Gantt 甘特图</option><option value="class">Class Diagram 类图</option></select></div>
           <div id="ai-image-preset-field" class="ai-provider-field"><label for="ai-image-preset">提示词预设</label><select id="ai-image-preset" class="provider-select" aria-label="提示词预设"><option value="">选择预设</option></select></div>
           <span id="ai-task-status" class="ai-task-status">准备就绪</span>
@@ -317,6 +321,12 @@
         <div class="confirm-actions"><button id="search-close" class="confirm-btn">关闭</button></div>
       </div>
     </div>
+    <div id="qd-visual-dialog" class="qd-visual-backdrop" hidden role="dialog" aria-modal="true" aria-label="AI 图片局部编辑">
+      <section class="qd-visual-shell">
+        <div class="qd-visual-heading"><strong>AI 图片局部编辑</strong><button id="qd-visual-close" type="button" aria-label="关闭图片编辑器">×</button></div>
+        <iframe id="qd-visual-frame" title="图片局部编辑器" referrerpolicy="no-referrer"></iframe>
+      </section>
+    </div>
     <div id="versions-dialog" class="confirm-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="versions-dialog-title">
       <div class="confirm-dialog utility-dialog">
         <div class="confirm-title" id="versions-dialog-title">版本历史</div>
@@ -340,6 +350,7 @@
   <script src="ai-protocol.js"></script>
   <script src="ai-task-store.js"></script>
   <script src="update-checker.js"></script>
+  <script src="ai-visual-transfer.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>
