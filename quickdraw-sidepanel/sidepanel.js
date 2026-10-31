@@ -1571,6 +1571,23 @@
       if(document.activeElement!==input)input.focus({preventScroll:true});
     }
 
+    keepTextEditorOpenForToolbar(editor,finish){
+      const toolbar=$('#text-size-control');
+      const onEditorBlur=event=>{
+        // Moving from the canvas textarea into its font-size input is still
+        // part of the same text-editing session.
+        if(toolbar?.contains(event.relatedTarget))return;
+        finish(false);
+      };
+      const onToolbarFocusOut=event=>{
+        if(!editor.isConnected||toolbar.contains(event.relatedTarget)||event.relatedTarget===editor)return;
+        finish(false);
+      };
+      editor.addEventListener('blur',onEditorBlur);
+      toolbar?.addEventListener('focusout',onToolbarFocusOut);
+      return ()=>toolbar?.removeEventListener('focusout',onToolbarFocusOut);
+    }
+
     onKeyDown(e) {
       if(this.isTextEditingTarget(e.target)||e.isComposing)return;const mod=e.ctrlKey||e.metaKey,key=e.key.toLowerCase();
       if(this.editingKeyDown(e))return;
@@ -1604,7 +1621,7 @@
 
     updateTextSizeUI(size=this.currentTextSize,show=this.currentTool==='text',mode='text'){
       const control=$('#text-size-control');if(!control)return;this.sizeControlMode=mode;control.hidden=!show;control.setAttribute('aria-label',mode==='arrow'?'箭头大小':'文字格式');const noteControls=$('#note-text-controls');if(noteControls)noteControls.hidden=!['note','text'].includes(mode);
-      const fontInput=$('#text-font-number');if(fontInput){fontInput.value=String(Number(size)||28);fontInput.parentElement.hidden=mode==='arrow';}
+      const fontInput=$('#text-font-number');if(fontInput){if(document.activeElement!==fontInput)fontInput.value=String(Number(size)||28);fontInput.parentElement.hidden=mode==='arrow';}
       $$('[data-note-valign]',control).forEach(b=>b.hidden=mode!=='note');
       const buttons=$$('[data-text-size]',control);
       if(mode==='arrow'){const level=['S','M','L','XL'].includes(String(size))?String(size):'M';buttons.forEach(b=>b.classList.toggle('active',b.textContent.trim()===level));return;}
@@ -2329,8 +2346,10 @@
       };
 
       let done=false;
+      let unbindToolbarFocus=()=>{};
       const finish=(cancel=false)=>{
         if(done)return;done=true;
+        unbindToolbarFocus();
         const text=ta.value.replace(/\s+$/,'');
         if(cancel){
           if(isNew)this.elements=this.elements.filter(x=>x!==el);
@@ -2350,7 +2369,7 @@
       };
 
       ta.addEventListener('input',syncText);
-      ta.addEventListener('blur',()=>finish(false));
+      unbindToolbarFocus=this.keepTextEditorOpenForToolbar(ta,finish);
       ta.addEventListener('keydown',e=>{
         if(e.key==='Escape'){e.preventDefault();finish(true);}
         else if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();finish(false);}
@@ -2385,8 +2404,10 @@
         const next=`${m[1]}${marker} ${m[3]?'[ ] ':''}`;
         ta.setRangeText('\n'+next,cursor,cursor,'end');syncEditor();
       });
-      const finish=(cancel=false)=>{if(done)return;done=true;resizeObserver?.disconnect();if(!cancel)syncEditor();ta.remove();if(isNew||!cancel)this.commit();this.setTool('select');this.render();};
-      ta.addEventListener('blur',()=>finish(false));ta.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();finish(true);}});
+      let unbindToolbarFocus=()=>{};
+      const finish=(cancel=false)=>{if(done)return;done=true;unbindToolbarFocus();resizeObserver?.disconnect();if(!cancel)syncEditor();ta.remove();if(isNew||!cancel)this.commit();this.setTool('select');this.render();};
+      unbindToolbarFocus=this.keepTextEditorOpenForToolbar(ta,finish);
+      ta.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();finish(true);}});
     }
     editTextElement(el){if(el.type==='mindnode')return this.editMindNode(el,false);this.createTextEditor(el.x,el.y,el.type==='note',el);}
 
