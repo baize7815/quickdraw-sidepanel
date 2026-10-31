@@ -13,6 +13,10 @@ function script(s){
  if(!s||!Number.isFinite(s.width)||!Number.isFinite(s.height)||s.width<1||s.height<1)throw Error('图片尺寸无效');
  const request=safe(s.prompt);if(!request)throw Error('请先填写编辑要求。');
  const parts=[
+ '[TASK] High-precision local editing of Image 1; keep the original aspect ratio and physical resolution.',
+ '[USER INSTRUCTION] '+request,
+ '[IMAGE ROLES] Image 1 is the clean base. Image 2 is a spatial annotation map, not the output. Additional images are references only.',
+ '[STRICT NEGATIVE RULES] Never reproduce red tint, dashed outlines, point badges or numbered annotations. Do not redraw unrelated content or modify unrequested text.',
  'Edit Image 1, the clean original image. Desired change: '+request,
  'Keep the original medium, framing, perspective, subject identity and visual style unless the request explicitly changes them.',
  'Match lighting direction, scale, shadows, reflections and materials to the original surroundings.',

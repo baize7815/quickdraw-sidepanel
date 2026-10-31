@@ -17,6 +17,21 @@ body.embedded #fusion-controls,body.embedded #visual-send-panel{padding:8px 10px
 #point-list .point-row{min-width:0;margin-top:0}
 #point-list .point-row.expanded{grid-column:1/-1}
 @media(max-width:310px){#point-list{grid-template-columns:minmax(0,1fr)}}
+/* Editing overlay draws a pixel-accurate brush ring instead of a static crosshair. */
+.surface canvas#overlay{cursor:none}
+body[data-theme=dark]{color:#e5e7eb;background:#181926}
+body[data-theme=dark] header,body[data-theme=dark] .modes,body[data-theme=dark] .panel,body[data-theme=dark] .material-bar{background:#262839;border-color:#42465b;color:#eef1fa}
+body[data-theme=dark] header small,body[data-theme=dark] #size-label,body[data-theme=dark] #tool-help,body[data-theme=dark] label,body[data-theme=dark] .hint{color:#bdc4d7}
+body[data-theme=dark] button,body[data-theme=dark] textarea,body[data-theme=dark] #visual-provider,body[data-theme=dark] #mention-menu{background:#303449;border-color:#525b76;color:#f0f2fb}
+body[data-theme=dark] button.active,body[data-theme=dark] button.primary{background:#286be6}
+body[data-theme=dark] .stage{background:#22263a;border-color:#474c65}
+body[data-theme=dark] .material-item{background:#31364d;border-color:#565d79}
+body[data-theme=dark] .material-item.primary{background:#233d6f}
+#gemini-options{display:flex;flex-direction:column;gap:8px;margin:8px 0;padding:10px;border:1px solid var(--line,#dfe3ee);border-radius:9px}
+#gemini-options[hidden]{display:none}
+#gemini-options label{font-size:11px;line-height:1.5}
+#gemini-options .check{display:flex;align-items:flex-start;gap:6px}
+#gemini-options .check input{margin-top:2px;flex:0 0 auto}
 
 
 /* Dense mask controls fit inside the narrow side-panel iframe. */

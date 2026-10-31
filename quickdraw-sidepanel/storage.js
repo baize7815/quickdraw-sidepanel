@@ -230,14 +230,16 @@
         const hash = core.hashString(JSON.stringify(document.elements || []));
         if (latest?.hash === hash) return;
         const now = Date.now();
+        const assetIds=[...new Set((document.elements||[]).map(item=>item.assetId).filter(Boolean))];
         if (!force && latest && now - latest.createdAt < 60_000) {
-          await this.transaction('versions', 'readwrite', store => store.put({ ...latest, document: core.clone(document), name, hash, createdAt: now }));
+          await this.transaction('versions', 'readwrite', store => store.put({ ...latest, document: core.clone(document), assetIds, name, hash, createdAt: now }));
           return;
         }
-        await this.transaction('versions', 'readwrite', store => store.add({ fileId, document: core.clone(document), name, hash, createdAt: now }));
+        await this.transaction('versions', 'readwrite', store => store.add({ fileId, document: core.clone(document), assetIds, name, hash, createdAt: now }));
         const refreshed = await this.listVersions(fileId);
-        // Keep at most 5 historical snapshots per board.
-        for (const old of refreshed.slice(5)) await this.transaction('versions', 'readwrite', store => store.delete(old.id));
+        // Keep up to thirty named snapshots per board, preserving older
+        // documents and their asset references until explicit pruning.
+        for (const old of refreshed.slice(30)) await this.transaction('versions', 'readwrite', store => store.delete(old.id));
       });
     }
 

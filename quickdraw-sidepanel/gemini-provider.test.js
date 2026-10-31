@@ -55,3 +55,35 @@ test('Gemini visual edit task keeps ordered image inputs',()=>{
  assert.equal(task.provider,'gemini');
  assert.deepEqual(task.inputAssetIds,['a_photo_0','a_photo_1','a_photo_2','a_photo_3','a_photo_4']);
 });
+test('only explicit request reuses a successful Quickdraw-owned Gemini session for the same board',async()=>{
+ const previous=globalThis.chrome;
+ const session=new Map(),local=new Map(),calls=[];
+ const tab={id:91,windowId:5,url:'https://gemini.google.com/app/previous-quickdraw',status:'complete'};
+ let created=null;
+ globalThis.chrome={
+  storage:{
+   session:{get:async key=>({[key]:session.get(key)}),set:async packet=>{for(const [key,value] of Object.entries(packet))session.set(key,value);},remove:async key=>session.delete(key)},
+   local:{get:async key=>({[key]:local.get(key)}),set:async packet=>{for(const [key,value] of Object.entries(packet))local.set(key,value);}}
+  },
+  tabs:{
+   get:async id=>{if(id===91)return tab;if(created?.id===id)return created;throw Error('missing');},
+   create:async options=>{calls.push('create');created={...tab,id:92,url:options.url};return created;},
+   update:async()=>tab
+  }
+ };
+ try{
+  const first=new Gemini();
+  await first.saveTabMeta({tabId:91,windowId:5,ownedByExtension:true,ownerToken:'unique-owner',taskId:'completed',groupId:null});
+  assert.equal(await first.cleanup({tabId:91,tabOwned:true,tabOwnerToken:'unique-owner',taskId:'completed',boardId:'board-a',outputAssetId:'generated-1'}),true);
+  const record=local.get(first.getLastConversationKey());
+  assert.equal(record.tabId,91);
+  assert.equal(record.boardId,'board-a');
+  const second=new Gemini();
+  assert.equal(await second.ensureTab(5,{taskId:'followup',boardId:'board-a',reuseGeminiTab:true}),91);
+  assert.equal(second.getTabMeta().ownedByExtension,true);
+  assert.deepEqual(calls,[]);
+  const third=new Gemini();
+  assert.equal(await third.ensureTab(5,{taskId:'other-board',boardId:'board-b',reuseGeminiTab:true}),92);
+  assert.deepEqual(calls,['create']);
+ }finally{globalThis.chrome=previous;}
+});

@@ -153,7 +153,10 @@
     },
 
     drawVectorPath(ctx,el){
-      const path=new Path2D(V.pathData(el));ctx.fillStyle=el.fillColor||el.color||this.currentColor;ctx.strokeStyle=el.strokeColor||el.color||this.currentColor;ctx.lineCap=el.linecap||'round';ctx.lineJoin=el.linejoin||'round';if(Array.isArray(el.dashArray))ctx.setLineDash(el.dashArray);
+      const path=new Path2D(V.pathData(el)),bounds=V.pathBounds(el);
+      ctx.fillStyle=this.canvasGradient(ctx,el.fillGradient,bounds)||el.fillColor||el.color||this.currentColor;
+      ctx.strokeStyle=this.canvasGradient(ctx,el.strokeGradient,bounds)||el.strokeColor||el.color||this.currentColor;
+      ctx.lineCap=el.linecap||'round';ctx.lineJoin=el.linejoin||'round';if(Array.isArray(el.dashArray))ctx.setLineDash(el.dashArray);
       if(el.fill&&el.fill!=='none'){
         ctx.save();ctx.globalAlpha*=el.fillOpacity==null?1:Math.max(0,Math.min(1,Number(el.fillOpacity)||0));
         if(el.fill==='pattern'){ctx.clip(path,'evenodd');ctx.globalAlpha*=.35;ctx.lineWidth=1.2;const b=V.pathBounds(el);for(let x=b.x-b.h;x<b.x+b.w;x+=10){ctx.beginPath();ctx.moveTo(x,b.y+b.h);ctx.lineTo(x+b.h,b.y);ctx.stroke();}}
@@ -162,7 +165,7 @@
       if(el.stroke!=='none'){ctx.save();ctx.globalAlpha*=el.strokeOpacity==null?1:Math.max(0,Math.min(1,Number(el.strokeOpacity)||0));ctx.stroke(path);ctx.restore();}
     },
     pointInVectorPath(p,el){const ctx=this.ctx;ctx.save();ctx.setTransform(1,0,0,1,0,0);const path=new Path2D(V.pathData(el));ctx.lineWidth=Math.max(el.size||4,8/this.scale);const hit=(el.fill!=='none'&&ctx.isPointInPath(path,p.x,p.y,el.fillRule==='evenodd'?'evenodd':'nonzero'))||(el.stroke!=='none'&&ctx.isPointInStroke(path,p.x,p.y));ctx.restore();return hit;},
-    svgVectorPath(el){const esc=v=>this.xmlEscape(v),fill=el.fill==='none'?'none':el.fill==='pattern'?`url(#${this.patternId(el.fillColor||el.color||this.currentColor)})`:el.fillColor||el.color||this.currentColor,fillOpacity=el.fillOpacity==null?1:Math.max(0,Math.min(1,Number(el.fillOpacity)||0)),strokeOpacity=el.strokeOpacity==null?1:Math.max(0,Math.min(1,Number(el.strokeOpacity)||0)),dash=Array.isArray(el.dashArray)&&el.dashArray.length?el.dashArray.map(v=>this.svgNum(v)).join(' '):this.svgDash(el);return `<path d="${esc(V.pathData(el))}" fill="${esc(fill)}" fill-rule="${el.fillRule==='evenodd'?'evenodd':'nonzero'}" fill-opacity="${this.svgNum(fillOpacity)}" stroke="${esc(el.stroke==='none'?'none':el.strokeColor||el.color||this.currentColor)}" stroke-opacity="${this.svgNum(strokeOpacity)}" stroke-width="${this.svgNum(el.size||2)}" stroke-linecap="${esc(el.linecap||'round')}" stroke-linejoin="${esc(el.linejoin||'round')}" vector-effect="non-scaling-stroke"${dash?` stroke-dasharray="${dash}"`:''}/>`;},
+    svgVectorPath(el){const esc=v=>this.xmlEscape(v),fill=el.fill==='none'?'none':el.fill==='pattern'?`url(#${this.patternId(el.fillColor||el.color||this.currentColor)})`:this.svgGradientReference(el,'fill')||el.fillColor||el.color||this.currentColor,stroke=el.stroke==='none'?'none':this.svgGradientReference(el,'stroke')||el.strokeColor||el.color||this.currentColor,fillOpacity=el.fillOpacity==null?1:Math.max(0,Math.min(1,Number(el.fillOpacity)||0)),strokeOpacity=el.strokeOpacity==null?1:Math.max(0,Math.min(1,Number(el.strokeOpacity)||0)),dash=Array.isArray(el.dashArray)&&el.dashArray.length?el.dashArray.map(v=>this.svgNum(v)).join(' '):this.svgDash(el);return `<path d="${esc(V.pathData(el))}" fill="${esc(fill)}" fill-rule="${el.fillRule==='evenodd'?'evenodd':'nonzero'}" fill-opacity="${this.svgNum(fillOpacity)}" stroke="${esc(stroke)}" stroke-opacity="${this.svgNum(strokeOpacity)}" stroke-width="${this.svgNum(el.size||2)}" stroke-linecap="${esc(el.linecap||'round')}" stroke-linejoin="${esc(el.linejoin||'round')}" vector-effect="non-scaling-stroke"${dash?` stroke-dasharray="${dash}"`:''}/>`;},
 
     async runEditingTask(targets,task){
       if(this.editingBusy||this.backgroundRemovalInProgress||this.watermarkRemovalInProgress)return this.toast('请等待当前图片处理完成。');

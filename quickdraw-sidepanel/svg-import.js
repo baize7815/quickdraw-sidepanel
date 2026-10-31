@@ -16,7 +16,33 @@
   function inlineStyle(node){const raw=String(node.getAttribute('style')||'').trim(),out={};if(!raw)return out;for(const part of raw.split(';')){const decl=part.trim();if(!decl)continue;const at=decl.indexOf(':');if(at<=0)throw new Error('SVG style 格式无效。');const name=decl.slice(0,at).trim().toLowerCase(),value=decl.slice(at+1).trim();if(!STYLE_ATTRS.has(name))throw new Error(`SVG style 属性 ${name} 不受支持。`);if(!value||/expression\s*\(|var\s*\(|[{}]/i.test(value))throw new Error('SVG style 包含不支持的值。');if(/url\s*\(/i.test(value)&&!(['fill','stroke'].includes(name)&&localRef(value)))throw new Error('SVG style 包含不支持的外部资源。');out[name]=value;}return out;}
   const hexRgb=value=>{const v=String(value||'').trim();let m=v.match(/^#([0-9a-f]{3})$/i);if(m)return [...m[1]].map(ch=>parseInt(ch+ch,16));m=v.match(/^#([0-9a-f]{6})$/i);if(m)return[0,2,4].map(i=>parseInt(m[1].slice(i,i+2),16));m=v.match(/^rgb\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\)$/i);return m?m.slice(1).map(v=>Math.max(0,Math.min(255,Number(v)))):null;};
   const mixColors=(a,b)=>{if(!a)return b||'#000000';if(!b||a===b)return a;const x=hexRgb(a),y=hexRgb(b);if(!x||!y)return a;return`#${x.map((v,i)=>Math.round((v+y[i])/2).toString(16).padStart(2,'0')).join('')}`;};
-  function gradientResolver(root){const nodes=new Map(),cache=new Map(),used=new Set();for(const node of root.getElementsByTagName('*')){const tag=node.localName?.toLowerCase();if(['lineargradient','radialgradient'].includes(tag)&&node.id)nodes.set(node.id,node);}const resolve=(id,fallback='#808080',seen=new Set())=>{used.add(id);if(cache.has(id))return cache.get(id);if(seen.has(id))return fallback;seen.add(id);const node=nodes.get(id);if(!node)return fallback;const stops=[...node.children].filter(child=>child.localName?.toLowerCase()==='stop').map(stop=>{const style=inlineStyle(stop);return plainColor(style['stop-color']??stop.getAttribute('stop-color')??'#000000','#000000');});let value=stops.length?mixColors(stops[0],stops.at(-1)):null;if(!value){const href=node.getAttribute('href')||node.getAttribute('xlink:href');const ref=localHref(href);if(ref)value=resolve(ref[1],fallback,seen);}value=value||fallback;cache.set(id,value);return value;};return{paint(value,fallback){const ref=localRef(value);return ref?resolve(ref[1],fallback):plainColor(value,fallback);},used};}
+  function gradientResolver(root){
+    const nodes=new Map(),cache=new Map(),used=new Set(),degraded=new Set();
+    for(const node of root.getElementsByTagName('*')){
+      const tag=node.localName?.toLowerCase();
+      if(['lineargradient','radialgradient'].includes(tag)&&node.id)nodes.set(node.id,node);
+    }
+    const resolve=(id,fallback='#808080',seen=new Set())=>{
+      used.add(id);if(cache.has(id))return cache.get(id);
+      if(seen.has(id)||!nodes.has(id)){degraded.add(id);return fallback;}
+      seen.add(id);const node=nodes.get(id),tag=node.localName.toLowerCase();
+      let stops=[...node.children].filter(child=>child.localName?.toLowerCase()==='stop').slice(0,64).map(stop=>{
+        const style=inlineStyle(stop),raw=String(stop.getAttribute('offset')||'0').trim();
+        const offset=Math.max(0,Math.min(1,num(raw.replace(/%$/,''),0)*(raw.endsWith('%')?.01:1)));
+        return {offset,color:plainColor(style['stop-color']??stop.getAttribute('stop-color')??'#000000','#000000'),opacity:opacity(style['stop-opacity']??stop.getAttribute('stop-opacity')??1)};
+      });
+      if(!stops.length){const ref=localHref(node.getAttribute('href')||node.getAttribute('xlink:href'));const parent=ref?resolve(ref[1],fallback,seen):null;if(parent&&typeof parent==='object')stops=parent.stops.map(item=>({...item}));}
+      if(!stops.length){degraded.add(id);return fallback;}
+      stops.sort((a,b)=>a.offset-b.offset);
+      const units=node.getAttribute('gradientUnits')==='userSpaceOnUse'?'userSpaceOnUse':'objectBoundingBox';
+      const keys=tag==='lineargradient'?['x1','y1','x2','y2']:['cx','cy','r','fx','fy'];
+      const defaults=tag==='lineargradient'?['0%','0%','100%','0%']:['50%','50%','50%','50%','50%'];
+      const coords={};keys.forEach((key,i)=>{coords[key]=String(node.getAttribute(key)||defaults[i]).slice(0,32);});
+      const value={kind:tag,units,coords,stops};
+      cache.set(id,value);return value;
+    };
+    return {paint(value,fallback){const ref=localRef(value);return ref?resolve(ref[1],fallback):plainColor(value,fallback);},used,degraded};
+  }
   function styleFor(node,parent,paint){const s=cloneStyle(parent),inline=inlineStyle(node),value=name=>Object.prototype.hasOwnProperty.call(inline,name)?inline[name]:(node.hasAttribute(name)?node.getAttribute(name):null),fill=value('fill'),fillRule=value('fill-rule'),stroke=value('stroke'),strokeWidth=value('stroke-width'),nodeOpacity=value('opacity'),fillOpacity=value('fill-opacity'),strokeOpacity=value('stroke-opacity'),dashArray=value('stroke-dasharray'),linecap=value('stroke-linecap'),linejoin=value('stroke-linejoin');if(fill!=null)s.fill=paint(fill,'none');if(fillRule!=null){const v=fillRule.trim().toLowerCase();if(!['evenodd','nonzero'].includes(v))throw new Error('SVG fill-rule 不受支持。');s.fillRule=v;}if(stroke!=null)s.stroke=paint(stroke,'none');if(strokeWidth!=null)s.size=Math.max(.1,num(strokeWidth,1));if(nodeOpacity!=null)s.opacity*=opacity(nodeOpacity);if(fillOpacity!=null)s.fillOpacity*=opacity(fillOpacity);if(strokeOpacity!=null)s.strokeOpacity*=opacity(strokeOpacity);if(dashArray!=null){const raw=dashArray.trim();if(raw&&raw!=='none'){const vals=raw.split(/[\s,]+/).map(Number);if(vals.some(v=>!Number.isFinite(v)||v<0))throw new Error('SVG 虚线格式无效。');s.dashArray=vals;}else s.dashArray=[];}if(linecap!=null){const v=linecap.trim();if(!['butt','round','square'].includes(v))throw new Error('SVG stroke-linecap 不受支持。');s.linecap=v;}if(linejoin!=null){const v=linejoin.trim();if(!['miter','round','bevel'].includes(v))throw new Error('SVG stroke-linejoin 不受支持。');s.linejoin=v;}return s;}
   const N=(x,y)=>({x,y});
   function pathFromPoints(points,closed=false){return {closed,nodes:points.map(p=>N(p.x,p.y))};}
@@ -47,7 +73,9 @@
     return[];
   }
   function applyMatrix(paths,m){return paths.map(path=>({...path,nodes:path.nodes.map(node=>{const p=pt(m,node),out={...node,x:p.x,y:p.y};if(node.in)out.in=pt(m,node.in);if(node.out)out.out=pt(m,node.out);return out;})}));}
-  function elementFrom(node,style,m,newId){const paths=applyMatrix(shapePaths(node),m);if(!paths.length)return null;const stroke=style.stroke&&style.stroke!=='none'?'solid':'none',fill=style.fill&&style.fill!=='none'?'solid':'none',scale=Math.sqrt(Math.abs(m[0]*m[3]-m[1]*m[2]))||1;return{id:newId(),type:'path',paths,color:fill!=='none'?style.fill:(stroke!=='none'?style.stroke:'#000000'),fillColor:style.fill||'#000000',strokeColor:style.stroke||'#000000',fill,fillRule:style.fillRule||'nonzero',stroke,size:(style.size||1)*scale,dash:style.dashArray?.length?'dashed':'solid',dashArray:Array.isArray(style.dashArray)?style.dashArray.map(v=>v*scale):null,linecap:style.linecap||'butt',linejoin:style.linejoin||'miter',opacity:style.opacity,fillOpacity:style.fillOpacity,strokeOpacity:style.strokeOpacity};}
+  function elementFrom(node,style,m,newId){const paths=applyMatrix(shapePaths(node),m);if(!paths.length)return null;const stroke=style.stroke&&style.stroke!=='none'?'solid':'none',fill=style.fill&&style.fill!=='none'?'solid':'none',scale=Math.sqrt(Math.abs(m[0]*m[3]-m[1]*m[2]))||1;
+    const paintColor=v=>typeof v==='object'&&v?.stops?.length?v.stops[0].color:v;
+    return{id:newId(),type:'path',paths,color:fill!=='none'?paintColor(style.fill):(stroke!=='none'?paintColor(style.stroke):'#000000'),fillColor:paintColor(style.fill)||'#000000',strokeColor:paintColor(style.stroke)||'#000000',fillGradient:typeof style.fill==='object'?style.fill:null,strokeGradient:typeof style.stroke==='object'?style.stroke:null,fill,fillRule:style.fillRule||'nonzero',stroke,size:(style.size||1)*scale,dash:style.dashArray?.length?'dashed':'solid',dashArray:Array.isArray(style.dashArray)?style.dashArray.map(v=>v*scale):null,linecap:style.linecap||'butt',linejoin:style.linejoin||'miter',opacity:style.opacity,fillOpacity:style.fillOpacity,strokeOpacity:style.strokeOpacity};}
   function parse(text,{newId=()=>`e${Math.random().toString(36).slice(2)}`}={}){
     const source=String(text||'');if(new Blob([source]).size>MAX_BYTES)throw new Error('SVG 超过 1 MiB 安全上限。');if(/<!DOCTYPE|<!ENTITY/i.test(source))throw new Error('SVG 不允许 DOCTYPE 或实体。');
     const doc=new DOMParser().parseFromString(source,'image/svg+xml');if(doc.querySelector('parsererror'))throw new Error('SVG XML 解析失败。');const root=doc.documentElement;if(root?.localName?.toLowerCase()!=='svg')throw new Error('剪贴板内容不是 SVG。');
@@ -57,7 +85,7 @@
       for(const child of [...node.children])walk(child,style,matrix,depth+1,childRender);
     };
     let rootMatrix=I;const viewBox=(root.getAttribute('viewBox')||'').trim();if(viewBox){const v=viewBox.split(/[\s,]+/).map(Number);if(v.length!==4||v.some(n=>!Number.isFinite(n))||v[2]<=0||v[3]<=0)throw new Error('SVG viewBox 无效。');const width=num(root.getAttribute('width'),v[2]),height=num(root.getAttribute('height'),v[3]);if(width<=0||height<=0)throw new Error('SVG 尺寸无效。');rootMatrix=mul([width/v[2],0,0,height/v[3],0,0],[1,0,0,1,-v[0],-v[1]]);}
-    walk(root,base,rootMatrix,1);if(!elements.length)throw new Error('SVG 中没有可导入的矢量形状。');return{elements,nodeCount,commandCount,degradedGradients:gradients.used.size};
+    walk(root,base,rootMatrix,1);if(!elements.length)throw new Error('SVG 中没有可导入的矢量形状。');return{elements,nodeCount,commandCount,degradedGradients:gradients.degraded.size,preservedGradients:gradients.used.size-gradients.degraded.size};
   }
   const api={parse,MAX_BYTES,MAX_NODES,MAX_DEPTH,MAX_COMMANDS};globalThis.QuickdrawSVGImport=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })();

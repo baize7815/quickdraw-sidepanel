@@ -21,6 +21,10 @@
     const copy = { ...task };
     copy.prompt = AI.limitText(copy.prompt, AI.MAX_PROMPT_LENGTH);
     copy.visualEdit = copy.kind === 'image-edit' && copy.visualEdit === true;
+    copy.visualMode = copy.visualEdit && ['mask','point','fusion'].includes(copy.visualMode) ? copy.visualMode : '';
+    copy.visualMaskAssetId = copy.visualEdit ? String(copy.visualMaskAssetId || '').slice(0,200) : '';
+    copy.visualMainAssetId = copy.visualEdit ? String(copy.visualMainAssetId || '').slice(0,200) : '';
+    copy.reuseGeminiTab = copy.provider==='gemini' && copy.kind==='image-edit' && copy.reuseGeminiTab===true;
     copy.diagramType = copy.kind === 'image-edit' ? '' : (AI.normalizeDiagramType?.(copy.diagramType) || 'flowchart');
     copy.rawReply = AI.limitText(copy.rawReply, AI.MAX_REPLY_LENGTH);
     copy.validatedMermaid = AI.limitText(copy.validatedMermaid, AI.MAX_REPLY_LENGTH);

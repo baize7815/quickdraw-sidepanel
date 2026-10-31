@@ -36,7 +36,7 @@ function setup(){
   getElementsBBox:()=>({x:3,y:5,w:100,h:100}),closeVisualImageEditor(){notes.push('closed');},
   renderAIProgress(){},refreshAITasks(){return Promise.resolve();},toast(t){notes.push(t);}
  };
- const event={origin:'chrome-extension://quickdraw-test',source:frame.contentWindow,data:{type:'qd-visual-submit',provider:'gpt',mainAssetId:'a_main',guideAssetId:'a_guide',inputAssetIds:['a_main','a_guide','a_reference'],prompt:'Edit test'}};
+ const event={origin:'chrome-extension://quickdraw-test',source:frame.contentWindow,data:{type:'qd-visual-submit',provider:'gpt',mode:'point',mainAssetId:'a_main',guideAssetId:'a_guide',inputAssetIds:['a_main','a_guide','a_reference'],prompt:'Edit test'}};
  return {receive,board,event,assets,emitted,messages,notes,deletes,store};
 }
 test('侧边栏提交使用隔离资产，画板主图和参考原件保留',async()=>{
@@ -45,6 +45,7 @@ test('侧边栏提交使用隔离资产，画板主图和参考原件保留',asy
  const payload=s.emitted[0].payload;
  assert.equal(s.emitted[0].type,'qd-ai-submit');
  assert.equal(payload.visualEdit,true);
+ assert.equal(payload.visualMode,'point');
  assert.equal(payload.inputAssets.length,3);
  assert.notEqual(payload.inputAssets[0].assetId,'a_main');
  assert.notEqual(payload.inputAssets[1].assetId,'a_guide');

@@ -82,7 +82,7 @@ try:
 
             # Space-saving copy is removed; select keeps an accessible name.
             assert frame.locator('#visual-send-panel .hint').count() == 0
-            assert frame.locator('#visual-send-panel label').count() == 0
+            assert frame.locator('#gemini-options').is_hidden()
             assert frame.locator('#visual-provider').get_attribute('aria-label') == '图片服务'
             assert frame.locator('#visual-send').is_visible()
             frame.locator("[data-mode=point]").click()
@@ -133,6 +133,9 @@ try:
             frame.locator("#request").fill("pink hair, refer to @\u56fe2, at @\u70b91")
             assert frame.locator('#visual-provider option[value="gemini"]').count() == 1
             frame.locator('#visual-provider').select_option('gemini')
+            assert frame.locator('#gemini-options').is_visible()
+            assert frame.locator('#gemini-reuse-session').is_visible()
+            assert frame.locator('#gemini-ratio').input_value() == 'auto'
             frame.locator("#visual-send").click()
             page.wait_for_function("window.received !== null", timeout=8000)
             payload = page.evaluate("window.received")

@@ -24,6 +24,8 @@
   const GROK_ORIGINS = Object.freeze(['https://grok.com/*']);
   const GROK_AUTH_ORIGINS = Object.freeze(['https://accounts.x.ai/*']);
   const GEMINI_ORIGINS = Object.freeze(['https://gemini.google.com/*']);
+  const GEMINI_AUTH_ORIGINS = Object.freeze(['https://accounts.google.com/*']);
+  const GEMINI_IMAGE_ORIGINS = Object.freeze(['https://*.googleusercontent.com/*','https://*.gstatic.com/*']);
   const STAGES = Object.freeze({
     queued: Object.freeze({ timeout: 30_000, order: 0 }),
     'page-loading': Object.freeze({ timeout: 120_000, order: 1 }),
@@ -69,7 +71,7 @@
       id: 'gemini', label: 'Gemini', enabled: true,
       capabilities: Object.freeze({ text: false, mermaid: false, image: true }),
       origins: GEMINI_ORIGINS,
-      authOrigins: Object.freeze([]), imageOrigins: Object.freeze([]), maxInputImages: 5
+      authOrigins: GEMINI_AUTH_ORIGINS, imageOrigins: GEMINI_IMAGE_ORIGINS, maxInputImages: 5
     }),
     deepseek: Object.freeze({
       id: 'deepseek',
@@ -563,6 +565,10 @@
       provider: p.id,
       kind,
       visualEdit: kind === 'image-edit' && input.visualEdit === true,
+      visualMode: kind === 'image-edit' && input.visualEdit === true ? (['mask','point','fusion'].includes(input.visualMode) ? input.visualMode : '') : '',
+      visualMaskAssetId: kind === 'image-edit' && input.visualEdit === true ? String(input.visualMaskAssetId || '').slice(0, 200) : '',
+      visualMainAssetId: kind === 'image-edit' && input.visualEdit === true ? String(input.visualMainAssetId || '').slice(0, 200) : '',
+      reuseGeminiTab: p.id==='gemini' && kind==='image-edit' && input.reuseGeminiTab===true,
       boardId: String(input.boardId),
       sourceWindowId: Number.isInteger(input.sourceWindowId) ? input.sourceWindowId : null,
       sourceInstanceId: String(input.sourceInstanceId),

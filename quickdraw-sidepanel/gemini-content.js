@@ -496,14 +496,30 @@
     return null;
   }
 
+  function upgradeGeminiImageUrl(rawUrl) {
+    const original=String(rawUrl||'').trim();
+    try {
+      const url=new URL(original);
+      if(url.protocol!=='https:'||!/(^|\.)googleusercontent\.com$/i.test(url.hostname))return original;
+      // The terminal Google serving suffix often specifies preview dimensions.
+      if(!/=[wsh]\d+(?:-[a-z0-9]+)*$/i.test(url.pathname))return original;
+      url.pathname=url.pathname.replace(/=[wsh]\d+(?:-[a-z0-9]+)*$/i,'=s0');
+      return url.href;
+    }catch{return original;}
+  }
+
   async function fetchCandidateBlob(candidate) {
-    const url = String(candidate?.imageUrl || '');
-    if (!url || /^https?:/i.test(url) || /^blob:|^data:/i.test(url)) {
+    const original=String(candidate?.imageUrl||'');
+    for(const url of [...new Set([upgradeGeminiImageUrl(original),original].filter(Boolean))]){
+      if(!/^(?:https?:|blob:|data:image\/)/i.test(url))continue;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15_000);
       try {
         const response = await fetch(url, { credentials: 'include', signal: controller.signal });
-        if (response.ok) return await response.blob();
+        if(response.ok){
+          const blob=await response.blob();
+          if(blob?.size>1024&&blob.type.startsWith('image/'))return {blob,url};
+        }
       } catch {} finally { clearTimeout(timeout); }
     }
     return null;
@@ -680,11 +696,11 @@
        const ended = hasCompletionEvidence({ element: turn }, candidate) || (semanticTurn && stableFor >= 3000 && !busy);
       if (candidate && stableFor >= STABLE_WINDOW && !busy && ended) {
         if (record.phaseEvents) emitPhase(taskId, 'returning', { progress: 0 });
-        const imageBlob = await fetchCandidateBlob(candidate);
-        const imageDataUrl = imageBlob ? await blobToDataUrl(imageBlob) : '';
+        const imageResult = await fetchCandidateBlob(candidate);
+        const imageDataUrl = imageResult ? await blobToDataUrl(imageResult.blob) : '';
         if (!active.has(taskId)) return;
         dispose(taskId);
-        emit(taskId, 'image-reply', { phase: 'complete', imageUrl: candidate.imageUrl, imageDataUrl, fingerprint: key, imageWidth: candidate.width, imageHeight: candidate.height });
+        emit(taskId, 'image-reply', { phase: 'complete', imageUrl: imageResult?.url||candidate.imageUrl, imageDataUrl, fingerprint: key, imageWidth: candidate.width, imageHeight: candidate.height });
         return;
       }
       if (Date.now() - startedAt >= REPLY_TIMEOUT || (record.deadlineAt && Date.now() >= record.deadlineAt)) {
@@ -760,8 +776,9 @@
     return (previews || []).find(image => !baselinePreviews?.has(image) || baselinePreviews.get(image) !== attachmentPreviewState(image)) || null;
   }
 
-  function attachmentReadyEvidence(marker, preview, sendReady) {
-    if (!sendReady || (marker && (attachmentIsBusy(marker) || attachmentIsError(marker)))) return false;
+  function attachmentReadyEvidence(marker, preview) {
+    // Upload completion must not depend on a send button disabled by an empty prompt.
+    if (marker && (attachmentIsBusy(marker) || attachmentIsError(marker))) return false;
     return !!((marker && attachmentIsComplete(marker)) || isLoadedAttachmentPreview(preview));
   }
 
@@ -845,7 +862,7 @@
       const completeMarkers = freshMarkers.filter(attachmentIsComplete).filter(marker => !freshMarkers.some(other => other !== marker && attachmentIsComplete(other) && marker.contains?.(other))).length;
       const busyMarkers = freshMarkers.filter(attachmentIsBusy);
       const errorMarkers = freshMarkers.filter(attachmentIsError);
-      const readyCount = Math.max(completePreviews, completeMarkers, expectedCount === 1 && attachmentReadyEvidence(targetMarker, freshPreviews[0], sendReady) ? 1 : 0);
+      const readyCount = Math.max(completePreviews, completeMarkers, expectedCount === 1 && attachmentReadyEvidence(targetMarker, freshPreviews[0]) ? 1 : 0);
       const inputFileCount = Number(currentInput?.files?.length || 0);
       lastState = { expectedCount, readyCount, previewCount: freshPreviews.length, markerCount: freshMarkers.length, inputFileCount, busy: busyMarkers.length > 0, error: errorMarkers.length > 0 };
       if (readyCount >= expectedCount && !busyMarkers.length && !errorMarkers.length) {

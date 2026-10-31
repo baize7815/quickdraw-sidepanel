@@ -16,7 +16,7 @@
       <input id="project-input" type="file" accept=".quickdraw,application/json" hidden />
     </main>
 
-    <button class="app-logo" id="btn-clear-storage" title="清理画板数据（保留设置）" aria-label="清理画板数据（保留设置）">
+    <button class="app-logo" id="btn-logo-help" title="Quickdraw 帮助" aria-label="查看 Quickdraw 帮助">
       <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
         <path d="M7 21C7 12 13 6.5 20 7.5c6.5 1 7.5 8.5 2 11.3-4.5 2.2-9 .7-8-3.8" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
         <circle cx="24.5" cy="24.5" r="2.6" fill="#2f6fed"/>
@@ -82,6 +82,9 @@
       <button id="btn-ai-visual-edit" class="icon-btn selection-action ai-mindmap-action" title="AI 局部图片编辑（选中 1～4 张图片，主图和参考图）" aria-label="AI 局部图片编辑工作台" disabled>
         <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M7 14c3-5 6 5 10-4"/><circle cx="17" cy="7" r="2"/></svg>
       </button>
+      <button id="btn-ai-compare" class="icon-btn selection-action ai-mindmap-action" title="AI 结果与原图卷帘对比" aria-label="AI 结果与原图卷帘对比" disabled>
+        <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M12 3v18M2 14l5-4 3 3M14 11l3-3 5 5"/></svg>
+      </button>
     </aside>
     <div id="opacity-popover" class="popover opacity-popover" hidden role="dialog" aria-label="不透明度">
       <label for="opacity-slider">不透明度 <output id="opacity-output">100%</output></label>
@@ -92,6 +95,7 @@
 
     <div id="text-size-control" class="text-size-control" hidden aria-label="文字格式">
       <span class="text-size-options" aria-label="文字大小"><button type="button" data-text-size="16">S</button><button type="button" data-text-size="28" class="active">M</button><button type="button" data-text-size="44">L</button><button type="button" data-text-size="64">XL</button></span>
+      <label class="text-font-number-label">字号 <input id="text-font-number" type="number" min="8" max="144" step="1" value="28" aria-label="文字字号 8 到 144"></label>
       <span id="note-text-controls" class="note-text-controls" hidden aria-label="便签文字对齐">
         <span class="text-control-divider"></span>
         <button type="button" data-note-align="left" title="左对齐" aria-label="左对齐"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h11M4 14h16M4 18h9"/></svg></button>
@@ -219,10 +223,13 @@
       <button class="menu-item" id="btn-export-jpg"><span>导出 JPG</span><kbd>Ctrl/⌘ E</kbd></button>
       <button class="menu-item" id="btn-export-transparent"><span>导出透明 PNG</span></button>
       <button class="menu-item" id="btn-export-svg"><span>导出 SVG（可编辑矢量）</span></button>
+      <button class="menu-item" id="btn-export-sel-png"><span>仅导出所选为 PNG</span></button>
+      <button class="menu-item" id="btn-export-sel-svg"><span>仅导出所选为 SVG</span></button>
       <button class="menu-item" id="btn-export-directory"><span>默认导出路径</span><span class="menu-value" id="export-directory-label">浏览器默认</span></button>
       <div class="menu-divider"></div>
       <button class="menu-item" id="btn-export-project"><span>导出 Quickdraw 项目</span></button>
       <button class="menu-item" id="btn-import-project"><span>导入 Quickdraw 项目</span></button>
+      <button class="menu-item" id="btn-layers-panel"><span>图层与编组</span><span class="menu-value">显示 / 隐藏</span></button>
       <button class="menu-item" id="btn-versions"><span>版本历史</span></button>
       <button class="menu-item" id="btn-search"><span>查找画板内容</span><kbd>Ctrl F</kbd></button>
       <button class="menu-item" id="btn-edit-mermaid"><span>编辑 Mermaid 源码</span></button>
@@ -247,7 +254,15 @@
       </div></div>
       <div class="menu-control"><span>网格吸附</span><div class="seg" id="snap-control"><button data-enabled="false">关</button><button data-enabled="true" class="active">开</button></div></div>
       <button class="menu-item" id="btn-project-github" title="https://github.com/baize7815/quickdraw-sidepanel"><span>GitHub 项目</span><span class="menu-value">baize7815/quickdraw-sidepanel ↗</span></button>
+      <div class="menu-divider"></div>
+      <button class="menu-item danger-btn" id="btn-clear-storage"><span>清理全部画板数据…</span></button>
     </div>
+
+    <aside id="layers-panel" class="layers-panel" hidden aria-label="图层与编组">
+      <div class="layers-heading"><strong>图层与编组</strong><button id="btn-layers-close" type="button" aria-label="关闭图层面板">×</button></div>
+      <div class="layers-hint">顶部图层在前 · 拖动可调整同级遮挡顺序</div>
+      <div id="layers-tree" class="layers-tree" role="tree"></div>
+    </aside>
 
     <button id="btn-wheel-zoom-lock" class="wheel-zoom-lock" type="button" title="锁定鼠标滚轮缩放" aria-label="锁定鼠标滚轮缩放" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></button>
 
@@ -325,6 +340,21 @@
       <section class="qd-visual-shell">
         <div class="qd-visual-heading"><strong>AI 图片局部编辑</strong><button id="qd-visual-close" type="button" aria-label="关闭图片编辑器">×</button></div>
         <iframe id="qd-visual-frame" title="图片局部编辑器" referrerpolicy="no-referrer"></iframe>
+      </section>
+    </div>
+    <div id="ai-compare-dialog" class="confirm-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="ai-compare-title">
+      <section class="ai-compare-shell">
+        <div class="ai-compare-heading"><strong id="ai-compare-title">AI 原图 / 生成图对比</strong><button type="button" id="ai-compare-close" aria-label="关闭对比">×</button></div>
+        <div class="ai-compare-stage">
+          <img id="ai-compare-before" alt="原图">
+          <img id="ai-compare-after" alt="AI 生成结果">
+          <div class="ai-compare-divider" id="ai-compare-divider"></div>
+          <span class="ai-compare-label before">原图</span><span class="ai-compare-label after">生成图</span>
+        </div>
+        <label class="ai-compare-slider-label" for="ai-compare-slider">卷帘位置 <output id="ai-compare-value">50%</output></label>
+        <input id="ai-compare-slider" type="range" min="0" max="100" value="50" aria-label="左右对比位置">
+        <p class="ai-compare-hint" id="ai-compare-hint">对比只预览，不修改图片。</p>
+        <div class="ai-compare-actions"><button type="button" id="ai-compare-replace" class="confirm-btn" disabled>用生成图替换画板原图</button><button type="button" id="ai-compare-done" class="confirm-btn">关闭</button></div>
       </section>
     </div>
     <div id="versions-dialog" class="confirm-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="versions-dialog-title">

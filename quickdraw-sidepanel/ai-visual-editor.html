@@ -19,7 +19,9 @@
  <div class="panel"><h2>编辑意图</h2><label for="request">描述变化，输入 @ 可引用点位和图片</label><textarea id="request" rows="5" maxlength="3000" placeholder="例如：将选中的椅子改成深棕色真皮材质，保持原有透视与室内灯光。"></textarea>
  <button type="button" id="generate-prompt" hidden>生成 / 更新提示词</button><textarea id="prompt-output" hidden readonly aria-hidden="true"></textarea>
  <button type="button" id="copy-prompt" hidden>复制提示词</button></div>
- <div class="panel" id="visual-send-panel"><h2>发送图片编辑任务</h2><select id="visual-provider" aria-label="图片服务"><option value="gpt">GPT</option><option value="doubao">豆包</option><option value="grok">Grok</option><option value="gemini">Gemini</option></select><button id="visual-send" type="button" class="primary">发送图片与提示词</button></div>
+ <div class="panel" id="visual-send-panel"><h2>发送图片编辑任务</h2><select id="visual-provider" aria-label="图片服务"><option value="gpt">GPT</option><option value="doubao">豆包</option><option value="grok">Grok</option><option value="gemini">Gemini</option></select>
+ <div id="gemini-options" hidden><label class="check"><input type="checkbox" id="gemini-reuse-session"> 继续上次由 Quickdraw 创建的 Gemini 会话（如可用）</label><label for="gemini-ratio">期望生成图片比例</label><select id="gemini-ratio"><option value="auto">跟随主图</option><option value="1:1">1:1 方形</option><option value="16:9">16:9 横幅</option><option value="9:16">9:16 竖幅</option><option value="4:3">4:3 横图</option><option value="3:4">3:4 竖图</option></select></div>
+ <button id="visual-send" type="button" class="primary">发送图片与提示词</button></div>
  <div class="panel" id="visual-export-panel"><h2>备用：素材导出</h2><p class="hint">顺序：图 1 原图，图 2 标注图，图 3 参考图（仅融合）。灰度蒙版单独导出。请核对发送前的附件顺序。</p>
  <div class="export-buttons"><button type="button" id="export-package" class="primary">导出完整编辑包</button><button type="button" id="export-guide">导出标注图</button><button type="button" id="export-mask">导出灰度蒙版</button></div></div>
  <div class="panel" id="visual-manual-panel"><h2>备用：手动导入</h2><p class="hint">从允许使用的图像工具取得生成图后，可在此导入。蒙版模式可进行本地合成，严格保留未编辑区域的原图像素。</p>
