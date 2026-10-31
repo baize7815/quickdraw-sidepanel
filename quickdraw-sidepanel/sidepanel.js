@@ -1599,7 +1599,7 @@
       if(e.altKey&&!mod&&['t','l','r','b'].includes(key)){e.preventDefault();this.alignSelected(({t:'top',l:'left',r:'right',b:'bottom'})[key]);return;}
       if(mod&&key==='f'){e.preventDefault();this.openSearchDialog();return;}
       if(!$('#storage-dialog').hidden&&key==='escape'){e.preventDefault();this.closeStorageDialog();return;}if(!$('#clear-dialog').hidden&&key==='escape'){e.preventDefault();this.closeClearDialog();return;}if(e.code==='Space'){this.spaceDown=true;e.preventDefault();return;}if(mod&&key==='z'){e.preventDefault();e.shiftKey?this.redo():this.undo();return;}if(mod&&key==='y'){e.preventDefault();this.redo();return;}if(mod&&key==='d'){e.preventDefault();this.duplicateSelected();return;}if(mod&&key==='g'){e.preventDefault();e.shiftKey?this.ungroupSelected():this.groupSelected();return;}if(key==='tab'&&this.getMindFocus()){e.preventDefault();const node=this.getMindFocus();this.createMindRelative(node,e.shiftKey?'sibling':'child');return;}if(mod&&(e.code==='BracketLeft'||key==='[')){e.preventDefault();this.moveSelectedLayer(-1,e.shiftKey);return;}if(mod&&(e.code==='BracketRight'||key===']')){e.preventDefault();this.moveSelectedLayer(1,e.shiftKey);return;}if(key==='delete'||key==='backspace'){e.preventDefault();this.deleteSelected();return;}if(key==='escape'){this.isolationGroupId=null;this.closePopovers();this.clearSelection();this.render();return;}if(key==='f'){this.fitSelection();return;}
-      if(mod&&key==='e'){e.preventDefault();this.exportJPG();return;}if(!mod&&key==='m'){e.preventDefault();this.connectSelectedAsMindmap();return;}const map={v:'select','1':'select',h:'hand','2':'hand',d:'draw','3':'draw',i:'highlight','4':'highlight',e:'eraser','5':'eraser',k:'pen','6':'pen',l:'line','7':'line',a:'arrow','8':'arrow',g:'geo','9':'geo',t:'text',n:'note'};if(map[key]){this.setTool(map[key]);return;}
+      if(mod&&key==='e'){e.preventDefault();this.exportSelection('jpg');return;}if(!mod&&key==='m'){e.preventDefault();this.connectSelectedAsMindmap();return;}const map={v:'select','1':'select',h:'hand','2':'hand',d:'draw','3':'draw',i:'highlight','4':'highlight',e:'eraser','5':'eraser',k:'pen','6':'pen',l:'line','7':'line',a:'arrow','8':'arrow',g:'geo','9':'geo',t:'text',n:'note'};if(map[key]){this.setTool(map[key]);return;}
       if(this.getSelectedElements().length&&['arrowup','arrowdown','arrowleft','arrowright'].includes(key)){e.preventDefault();const d=e.shiftKey?10:1,dx=key==='arrowleft'?-d:key==='arrowright'?d:0,dy=key==='arrowup'?-d:key==='arrowdown'?d:0;this.moveSelected(dx/this.scale,dy/this.scale);this.commit();this.render();}
     }
 
@@ -2956,9 +2956,7 @@ $('#size-number')?.addEventListener('change',e=>applySizeValue(e.target.value,tr
       $('#storage-cancel').addEventListener('click',()=>this.closeStorageDialog());
       $('#storage-confirm').addEventListener('click',()=>this.confirmClearStorage());
       $('#storage-dialog').addEventListener('pointerdown',e=>{if(e.target===$('#storage-dialog'))this.closeStorageDialog();});
-      $('#btn-export-jpg').addEventListener('click',()=>{this.exportJPG();this.closePopovers();});
-      $('#btn-export-transparent').addEventListener('click',()=>{this.exportPNG(true);this.closePopovers();});
-      $('#btn-export-svg').addEventListener('click',()=>{this.exportSVG();this.closePopovers();});
+      $('#btn-export-sel-jpg').addEventListener('click',()=>{this.exportSelection('jpg');this.closePopovers();});
       $('#btn-export-sel-png').addEventListener('click',()=>{this.exportSelection('png');this.closePopovers();});
       $('#btn-export-sel-svg').addEventListener('click',()=>{this.exportSelection('svg');this.closePopovers();});
       $('#btn-export-directory').addEventListener('click',()=>this.setDefaultExportDirectory());
@@ -4032,8 +4030,17 @@ $('#size-number')?.addEventListener('change',e=>applySizeValue(e.target.value,tr
 
     async exportSelection(format){
       const items=this.getSelectedElements();if(!items.length){this.toast('请先选择要导出的对象。');return;}
+      if(!['jpg','png','svg'].includes(format))throw new Error('unsupported-export-format');
       const filename=`${this.exportBaseName()}-所选.${format}`;
-      try{const blob=format==='svg'?new Blob([(await this.createSVGDocument(true,items)).svg],{type:'image/svg+xml;charset=utf-8'}):await this.createPNGBlob(true,items,0);await this.downloadBlob(blob,filename);this.toast(`所选对象已导出为 ${format.toUpperCase()}。`);}
+      try{
+        const blob=format==='svg'
+          ?new Blob([(await this.createSVGDocument(true,items)).svg],{type:'image/svg+xml;charset=utf-8'})
+          :format==='jpg'
+            ?await this.createPNGBlob(false,items,0,'image/jpeg',.92,'#ffffff')
+            :await this.createPNGBlob(true,items,0);
+        await this.downloadBlob(blob,filename);
+        this.toast(`所选对象已导出为 ${format.toUpperCase()}。`);
+      }
       catch(error){console.error(error);this.toast(error.message==='canvas-too-large'?'导出范围过大，请缩小对象间距后重试。':'所选对象导出失败，请重试。');}
     }
 
