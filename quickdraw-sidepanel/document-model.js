@@ -49,7 +49,7 @@
     const groups=normalizeGroups(base.groups,elements);for(const element of elements){if(element.parentId&&!ids.has(String(element.parentId)))element.parentId=null;if(element.type==='mindedge'&&(!ids.has(String(element.fromId))||!ids.has(String(element.toId))))throw new Error(`连线 ${element.id} 引用了不存在的节点。`);}
     const camera=base.camera||{};return{...base,version:CURRENT_VERSION,revision:Math.max(0,finite(base.revision,0)),elements,groups,camera:{scale:Math.max(.02,Math.min(64,finite(camera.scale,1))),offsetX:bounded(camera.offsetX),offsetY:bounded(camera.offsetY)},aiTaskReceipts:base.aiTaskReceipts&&typeof base.aiTaskReceipts==='object'?clone(base.aiTaskReceipts):{},migrated};
   }
-  function createBlank(){return{version:CURRENT_VERSION,revision:0,elements:[],groups:[],camera:{scale:1,offsetX:0,offsetY:0},aiTaskReceipts:{}};}
+  function createBlank(){return{version:CURRENT_VERSION,revision:0,elements:[],groups:[],camera:{scale:.5,offsetX:0,offsetY:0},aiTaskReceipts:{}};}
   function encode(document){const normalized=normalizeDocument({...document,version:CURRENT_VERSION});delete normalized.migrated;return normalized;}
   const api={CURRENT_VERSION,MAX_ELEMENTS,MAX_GROUPS,MAX_GROUP_DEPTH,createBlank,normalizeDocument,encode};globalThis.QuickdrawDocumentModel=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })();

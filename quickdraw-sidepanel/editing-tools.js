@@ -11,8 +11,8 @@
     if(!Number.isFinite(w*h)||w<1||h<1||w>MAX_CANVAS_SIDE||h>MAX_CANVAS_SIDE||w*h>MAX_CANVAS_AREA)throw new Error('处理范围超过 1800 万像素或单边 16384 像素，请先缩小图片。');
     const canvas=document.createElement('canvas');canvas.width=Math.ceil(w);canvas.height=Math.ceil(h);return canvas;
   };
-  const shapeTypes=new Set(['rect','roundrect','ellipse','triangle','diamond','hexagon','star','cloud','draw','highlight','line','arrow','path']);
-  const booleanShapeTypes=new Set(['rect','roundrect','ellipse','triangle','diamond','hexagon','star','cloud','path']);
+  const shapeTypes=new Set(['rect','roundrect','ellipse','triangle','diamond','hexagon','star','cloud','speechbubble','downarrow','draw','highlight','line','arrow','path']);
+  const booleanShapeTypes=new Set(['rect','roundrect','ellipse','triangle','diamond','hexagon','star','cloud','speechbubble','downarrow','path']);
   const BOOLEAN_MAX_PIXELS=4_000_000,BOOLEAN_MAX_DENSITY=3;
 
   globalThis.QDEditing={
