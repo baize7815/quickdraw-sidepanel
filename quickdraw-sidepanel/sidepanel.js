@@ -8,12 +8,12 @@
   const newId = () => globalThis.QDCore.newId('e');
   const MAX_AI_OUTPUT_IMAGES = Number(globalThis.QuickdrawAI?.MAX_INPUT_IMAGES || 4);
   const DEFAULT_ZOOM = .5;
-  const TRANSLUCENT_SHAPE_PRESETS = Object.freeze({
+  const SHAPE_PRESETS = Object.freeze({
     blue:{type:'ellipse',color:'#85b8fa'},
     purple:{type:'ellipse',color:'#aa96f5'},
     pink:{type:'ellipse',color:'#e89beb'},
     orange:{type:'ellipse',color:'#ffb47f'},
-    'blue-round':{type:'roundrect',color:'#65b9ff',cornerSize:'L'}
+    'solid-rect':{type:'rect',color:'#2B2B2B',fillOpacity:1,stroke:'none'}
   });
   const COLOR_PALETTES = [
     { name:'多巴胺', colors:['#A785FE','#FF7BB5','#F73A2C','#FF7131','#FEE717','#557EF2','#45B4FC','#03BF61','#DDF977','#2B2B2B','#F2F2F2'] },
@@ -49,8 +49,8 @@
       this.wheelZoomLocked = false;
       this.currentSize = 3;
       this.currentDash = 'solid';
-      this.currentFill = 'solid';
-      this.currentStroke = 'none';
+      this.currentFill = 'none';
+      this.currentStroke = 'solid';
       this.currentOpacity = 1;
       this.currentMindStyle = 'rounded';
       this.gridType = 'lines';
@@ -1572,11 +1572,11 @@
       if(this.currentTool==='draw')this.currentElement={...base,type:'draw',points:[{x:q.x,y:q.y,pressure:e.pressure||.5}]};
       else if(this.currentTool==='highlight')this.currentElement={...base,type:'highlight',points:[{x:q.x,y:q.y}]};
       else if(this.currentTool==='geo'){
-        const preset=TRANSLUCENT_SHAPE_PRESETS[this.currentShapePreset];
+        const preset=SHAPE_PRESETS[this.currentShapePreset];
         this.currentElement={
           ...base,type:this.currentShape,x:q.x,y:q.y,w:0,h:0,
           ...(this.currentShape==='roundrect'?{cornerSize:preset?.cornerSize||this.currentCornerSize}:{}),
-          ...(preset?{fill:'solid',stroke:'solid',fillColor:preset.color,strokeColor:preset.color,color:preset.color,fillOpacity:.24,strokeOpacity:1,size:2}:{}),
+          ...(preset?{fill:'solid',stroke:preset.stroke||'solid',fillColor:preset.color,strokeColor:preset.color,color:preset.color,fillOpacity:preset.fillOpacity??.24,strokeOpacity:1,size:2}:{}),
         };
       }else this.currentElement={...base,type:this.currentTool,x:q.x,y:q.y,w:0,h:0,...(this.currentTool==='arrow'?{bend:0,arrowHeadSize:this.currentArrowHeadSize}:{})};
     }
@@ -3011,7 +3011,7 @@
       }));
       $$('#shape-popover [data-corner-size]').forEach(b=>b.addEventListener('click',()=>this.setCornerSize(b.dataset.cornerSize)));
       $$('#shape-popover [data-shape-preset]').forEach(b=>b.addEventListener('click',()=>{
-        const preset=TRANSLUCENT_SHAPE_PRESETS[b.dataset.shapePreset];
+        const preset=SHAPE_PRESETS[b.dataset.shapePreset];
         if(!preset)return;
         this.currentShapePreset=b.dataset.shapePreset;
         this.currentShape=preset.type;

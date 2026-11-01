@@ -148,7 +148,7 @@
 
     <div id="shape-popover" class="popover shape-popover" hidden aria-label="形状与半透明预设">
       <div class="shape-grid" aria-label="基本形状">
-        <button data-shape="rect" class="shape-option active" title="矩形（默认实心填充，无描边）"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" stroke="none"/></svg></button>
+        <button data-shape="rect" class="shape-option active" title="矩形"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></button>
       <button data-shape="roundrect" class="shape-option" title="圆角矩形"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/></svg></button>
       <button data-shape="ellipse" class="shape-option" title="椭圆"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></button>
       <button data-shape="triangle" class="shape-option" title="三角形"><svg viewBox="0 0 24 24"><path d="m12 3 10 18H2z"/></svg></button>
@@ -166,13 +166,13 @@
         <button type="button" data-corner-size="L" title="大圆角">L</button>
         <button type="button" data-corner-size="XL" title="最大圆角，短边的一半">XL</button>
       </div>
-      <div class="shape-settings-label">半透明预设 · 填充 24%</div>
-      <div class="shape-preset-grid" aria-label="半透明形状预设">
+      <div class="shape-settings-label">半透明与实心预设</div>
+      <div class="shape-preset-grid" aria-label="半透明与实心形状预设">
         <button type="button" data-shape-preset="blue" title="浅蓝半透明椭圆"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#85b8fa" fill-opacity=".24" stroke="#85b8fa" stroke-width="1.6"/></svg></button>
         <button type="button" data-shape-preset="purple" title="淡紫半透明椭圆"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#aa96f5" fill-opacity=".24" stroke="#aa96f5" stroke-width="1.6"/></svg></button>
         <button type="button" data-shape-preset="pink" title="粉色半透明椭圆"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#e89beb" fill-opacity=".24" stroke="#e89beb" stroke-width="1.6"/></svg></button>
         <button type="button" data-shape-preset="orange" title="橘色半透明椭圆"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#ffb47f" fill-opacity=".24" stroke="#ffb47f" stroke-width="1.6"/></svg></button>
-        <button type="button" data-shape-preset="blue-round" title="浅蓝半透明圆角矩形"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="5" fill="#65b9ff" fill-opacity=".24" stroke="#65b9ff" stroke-width="1.6"/></svg></button>
+        <button type="button" data-shape-preset="solid-rect" title="黑色实心矩形（无描边）"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" fill="#2B2B2B" stroke="none"/></svg></button>
       </div>
     </div>
 
@@ -208,12 +208,12 @@
       </div>
       <div class="style-card shape-style-card">
         <div class="style-row stroke-row" aria-label="形状边框">
-          <button class="style-option stroke-option" data-stroke="solid" title="显示边框"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
-          <button class="style-option stroke-option active" data-stroke="none" title="无边框"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M4 20 20 4"/></svg></button>
+          <button class="style-option stroke-option active" data-stroke="solid" title="显示边框"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+          <button class="style-option stroke-option" data-stroke="none" title="无边框"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M4 20 20 4"/></svg></button>
         </div>
         <div class="style-row">
-          <button class="style-option fill-option" data-fill="none" title="无填充"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
-          <button class="style-option fill-option active" data-fill="solid" title="实心"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" fill-opacity=".5"/></svg></button>
+          <button class="style-option fill-option active" data-fill="none" title="无填充"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+          <button class="style-option fill-option" data-fill="solid" title="实心"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" fill-opacity=".5"/></svg></button>
           <button class="style-option fill-option" data-fill="pattern" title="斜线"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="m6 15 9-9M9 18l9-9"/></svg></button>
         </div>
       </div>

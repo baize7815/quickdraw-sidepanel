@@ -32,7 +32,7 @@ try:
             context.add_init_script("""() => {
               window.chrome = {
                 runtime:{id:'shape-smoke',getURL:p=>location.origin+'/'+p,
-                         onMessage:{addListener(){}},getManifest:()=>({version:'3.9.10'})},
+                         onMessage:{addListener(){}},getManifest:()=>({version:'3.9.11'})},
                 windows:{getCurrent:async()=>({id:1})},
                 permissions:{contains:async()=>false},
                 tabs:{query:async()=>[],get:async()=>({}),create:async()=>({id:1})},
@@ -76,8 +76,10 @@ try:
                 page.mouse.move(x+width, y+height, steps=8)
                 page.mouse.up()
 
-            assert page.locator('.fill-option.active').get_attribute('data-fill') == 'solid'
-            assert page.locator('.stroke-option.active').get_attribute('data-stroke') == 'none'
+            assert page.locator('.fill-option.active').get_attribute('data-fill') == 'none'
+            assert page.locator('.stroke-option.active').get_attribute('data-stroke') == 'solid'
+            assert page.locator('[data-shape="rect"] svg rect').get_attribute("fill") is None
+            assert page.locator('[data-shape-preset="solid-rect"] svg rect').get_attribute("stroke") == "none"
             select_option('[data-shape="rect"]')
             drag(60, 80, 105, 75)
             default_rect = page.evaluate("""() => {
@@ -85,9 +87,9 @@ try:
               return {type:e.type,fill:e.fill,stroke:e.stroke,
                 fillOpacity:e.fillOpacity??1,svg:b.svgShapeMarkup(e)};
             }""")
-            assert default_rect["type"] == "rect" and default_rect["fill"] == "solid", default_rect
-            assert default_rect["stroke"] == "none" and default_rect["fillOpacity"] == 1, default_rect
-            assert 'stroke="none"' in default_rect["svg"], default_rect
+            assert default_rect["type"] == "rect" and default_rect["fill"] == "none", default_rect
+            assert default_rect["stroke"] == "solid" and default_rect["fillOpacity"] == 1, default_rect
+            assert 'fill="none"' in default_rect["svg"], default_rect
 
             select_option('[data-shape="speechbubble"]')
             drag(250, 180)
@@ -140,25 +142,28 @@ try:
             assert abs(largest["r"] - largest["min"]) < 1e-9, largest
             assert f'rx="{largest["r"]:g}"' in largest["svg"], largest
 
-            # Five presets: four translucent circles and one rounded rectangle.
+            # Four translucent circles and one opaque, borderless black rectangle.
             for index, (name, shape, color) in enumerate([
                 ("blue","ellipse","#85b8fa"),("purple","ellipse","#aa96f5"),
                 ("pink","ellipse","#e89beb"),("orange","ellipse","#ffb47f"),
-                ("blue-round","roundrect","#65b9ff")
+                ("solid-rect","rect","#2B2B2B")
             ]):
                 select_option(f'[data-shape-preset="{name}"]')
                 drag(200+index*135, 545, 115, 93)
                 record = page.evaluate("""() => {
                   const b=quickdraw,e=b.elements.at(-1);
-                  return {type:e.type,fill:e.fill,opacity:e.fillOpacity,
+                  return {type:e.type,fill:e.fill,stroke:e.stroke,opacity:e.fillOpacity,
                     strokeOpacity:e.strokeOpacity,color:e.fillColor,
                     svg:b.svgShapeMarkup(e),r:b.roundedCornerRadius(e)};
                 }""")
                 assert record["type"] == shape and record["fill"] == "solid", (name,record)
-                assert record["color"] == color and record["opacity"] == .24, (name,record)
-                assert record["strokeOpacity"] == 1 and 'fill-opacity="0.24"' in record["svg"]
-                if name == "blue-round":
-                    assert record["r"] > 12, record
+                assert record["color"] == color, (name,record)
+                if name == "solid-rect":
+                    assert record["opacity"] == 1 and record["stroke"] == "none", record
+                    assert 'fill-opacity="1"' in record["svg"] and 'stroke="none"' in record["svg"], record
+                else:
+                    assert record["opacity"] == .24 and record["stroke"] == "solid", (name,record)
+                    assert record["strokeOpacity"] == 1 and 'fill-opacity="0.24"' in record["svg"]
 
             # PNG must preserve translucent pixels and fully opaque boundaries.
             pixel = page.evaluate("""async () => {
@@ -173,17 +178,29 @@ try:
             }""")
             assert pixel["mime"] == "image/png", pixel
             assert 45 <= pixel["center"][3] <= 85, pixel
+            opaque_pixel = page.evaluate("""async () => {
+              const b=quickdraw,e=b.elements.find(x=>x.type==='rect'&&x.fillOpacity===1);
+              const blob=await b.createPNGBlob(true,[e],0);
+              const image=await createImageBitmap(blob);
+              const c=document.createElement('canvas');c.width=image.width;c.height=image.height;
+              const ctx=c.getContext('2d');ctx.drawImage(image,0,0);
+              const center=Array.from(ctx.getImageData(Math.floor(c.width/2),Math.floor(c.height/2),1,1).data);
+              image.close();return {mime:blob.type,center};
+            }""")
+            assert opaque_pixel["mime"] == "image/png", opaque_pixel
+            assert opaque_pixel["center"][:3] == [43,43,43] and opaque_pixel["center"][3] == 255, opaque_pixel
             preserved = page.evaluate("""() => {
               const doc=QuickdrawDocumentModel.normalizeDocument(quickdraw.serializeDocument());
               return {
                 bubble:doc.elements.some(e=>e.type==='speechbubble'),
                 arrow:doc.elements.some(e=>e.type==='downarrow'),
                 round:doc.elements.some(e=>e.type==='roundrect'&&e.cornerSize==='XL'),
-                translucent:doc.elements.filter(e=>e.fillOpacity===.24).length
+                translucent:doc.elements.filter(e=>e.fillOpacity===.24).length,
+                solidRect:doc.elements.some(e=>e.type==='rect'&&e.stroke==='none'&&e.fill==='solid'&&e.fillOpacity===1)
               };
             }""")
             assert preserved["bubble"] and preserved["arrow"] and preserved["round"], preserved
-            assert preserved["translucent"] == 5, preserved
+            assert preserved["translucent"] == 4 and preserved["solidRect"], preserved
             assert not errors, errors
             print("NEW_SHAPES_SEMITRANSPARENT_PRESETS_AND_ROUNDED_CORNERS_PASS")
         finally:
